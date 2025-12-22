@@ -1,59 +1,89 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# QuickRestaurant OMS
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> Sistema profesional de gestión de órdenes para restaurantes, con KDS (Kitchen Display System) y POS (Punto de Venta) básico, desarrollado en Laravel y Filament.
 
-## About Laravel
+---
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Descripción
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+QuickRestaurant OMS es una solución integral para la administración eficiente de restaurantes. Permite gestionar órdenes, platillos, categorías y usuarios, integrando un sistema de visualización en cocina (KDS) y un punto de venta (POS) intuitivo y moderno.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+El sistema está diseñado para ser fácil de usar, robusto y escalable, facilitando la operación diaria y mejorando la experiencia tanto del personal como de los clientes.
 
-## Learning Laravel
+## Características principales
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+- Gestión de órdenes en tiempo real (OMS)
+- Visualización de órdenes en cocina (KDS)
+- Punto de venta (POS) web amigable
+- Administración de platillos y categorías
+- Control de usuarios y roles
+- Panel administrativo con estadísticas y reportes
+- Interfaz moderna y responsiva
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Estructura de rutas principales
 
-## Laravel Sponsors
+- `/` — Página de bienvenida
+- `/login` — Autenticación de usuarios
+- `/admin` — Panel administrativo (Filament)
+- `/admin/orders` — Gestión de órdenes
+- `/admin/dishes` — Gestión de platillos
+- `/admin/categories` — Gestión de categorías
+- `/admin/users` — Gestión de usuarios
+- `/kitchen` — Pantalla de cocina (KDS)
+- `/pos` — Punto de venta (POS)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+## Módulos y componentes
 
-### Premium Partners
+- **OMS:** Motor central de gestión de órdenes, con seguimiento de estado y asignación a cocina.
+- **KDS:** Visualización clara y en tiempo real de las órdenes para el personal de cocina.
+- **POS:** Interfaz para toma de pedidos y cobro, con carrito y cálculo automático de totales.
+- **Panel de administración:** Basado en Filament, permite gestionar todos los recursos del restaurante.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## Instalación y uso
 
-## Contributing
+1. Clona el repositorio:
+   ```bash
+   git clone https://github.com/romantrapero/QuickRestaurant.git
+   cd QuickRestaurant
+   ```
+2. Instala dependencias:
+   ```bash
+   composer install
+   npm install && npm run build
+   ```
+3. Copia el archivo de entorno y configura tus variables:
+   ```bash
+   cp .env.example .env
+   # Edita .env según tu entorno
+   ```
+4. Genera la clave de la aplicación:
+   ```bash
+   php artisan key:generate
+   ```
+5. Ejecuta migraciones y seeders:
+   ```bash
+   php artisan migrate --seed
+   ```
+6. Inicia el servidor:
+   ```bash
+   php artisan serve
+   ```
+7. Accede a la aplicación en tu navegador:
+   - [http://localhost:8000](http://localhost:8000)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Tecnologías utilizadas
 
-## Code of Conduct
+- Laravel 12+
+- Filament v4
+- Livewire
+- Alpine.js
+- Tailwind CSS
+- MySQL
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Contribuciones
 
-## Security Vulnerabilities
+¡Las contribuciones son bienvenidas! Por favor, abre un issue o pull request para sugerencias, mejoras o reportes de bugs.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Licencia
 
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Este proyecto está bajo la licencia MIT.
