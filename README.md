@@ -78,7 +78,7 @@ El sistema está diseñado para ser fácil de usar, robusto y escalable, facilit
 - Livewire
 - Alpine.js
 - Tailwind CSS
-- MySQL
+- PostgreSQL
 
 ## Contribuciones
 
