@@ -26,11 +26,11 @@ class DishesTable
                     ->searchable(),
                 TextColumn::make('cost_price')
                     ->label('Costo')
-                    ->money()
+                    ->formatStateUsing(fn($state) => '$' . number_format($state, 2))
                     ->sortable(),
                 TextColumn::make('sale_price')
                     ->label('Precio de Venta')
-                    ->money()
+                    ->formatStateUsing(fn($state) => '$' . number_format($state, 2))
                     ->sortable(),
                 ToggleColumn::make('is_available')
                     ->label('Activo')

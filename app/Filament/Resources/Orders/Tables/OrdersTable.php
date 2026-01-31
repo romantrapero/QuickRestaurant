@@ -56,7 +56,7 @@ class OrdersTable
                     ->sortable(),
                 TextColumn::make('total')
                     ->label('Total')
-                    ->money('MXN')
+                    ->formatStateUsing(fn($state) => '$' . number_format($state, 2))
                     ->sortable(),
                 TextColumn::make('table_number')
                     ->label('Tipo de Orden')
