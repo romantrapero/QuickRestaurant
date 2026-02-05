@@ -54,6 +54,19 @@ class OrdersTable
                         'cancelled' => 'Cancelada',
                     ])
                     ->sortable(),
+                BadgeColumn::make('payment_status')
+                    ->label('Pago')
+                    ->formatStateUsing(fn ($state) => match ($state) {
+                        'unpaid' => 'Sin pagar',
+                        'partial' => 'Parcial',
+                        'paid' => 'Pagado',
+                        default => $state,
+                    })
+                    ->colors([
+                        'danger' => 'unpaid',
+                        'warning' => 'partial',
+                        'success' => 'paid',
+                    ]),
                 TextColumn::make('total')
                     ->label('Total')
                     ->formatStateUsing(fn($state) => '$' . number_format($state, 2))

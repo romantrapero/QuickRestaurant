@@ -37,6 +37,14 @@ class OrderForm
                         'Otro' => 'Otro',
                     ])
                     ->required(),
+                Select::make('payment_status')
+                    ->label('Estado de Pago')
+                    ->options([
+                        'unpaid' => 'Sin pagar',
+                        'partial' => 'Parcial',
+                        'paid' => 'Pagado',
+                    ])
+                    ->disabled(),
                 Textarea::make('customer_notes')
                     ->label('Notas del Cliente')
                     ->columnSpanFull(),

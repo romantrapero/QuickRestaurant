@@ -12,10 +12,11 @@ class Order extends Model
     use HasFactory;
 
     protected $fillable = [
-        'order_number', 
-        'status', 
-        'total', 
-        'table_number', 
+        'order_number',
+        'status',
+        'payment_status',
+        'total',
+        'table_number',
         'customer_name',
         'customer_notes',
         'completed_at'
@@ -56,11 +57,53 @@ class Order extends Model
     {
         return $query->whereIn('status', ['pending', 'preparing']);
     }
-    
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function modifications(): HasMany
+    {
+        return $this->hasMany(OrderModification::class);
+    }
+
     public function calculateTotal()
     {
         return $this->items->sum(function ($item) {
             return $item->quantity * $item->unit_price;
         });
+    }
+
+    public function recalculateTotal(): void
+    {
+        $this->total = $this->items()->sum(\Illuminate\Support\Facades\DB::raw('quantity * unit_price'));
+        $this->save();
+        $this->updatePaymentStatus();
+    }
+
+    public function amountPaid(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function amountRemaining(): float
+    {
+        return max(0, (float) $this->total - $this->amountPaid());
+    }
+
+    public function updatePaymentStatus(): void
+    {
+        $paid = $this->amountPaid();
+
+        if ($paid <= 0) {
+            $this->payment_status = 'unpaid';
+        } elseif ($paid >= (float) $this->total) {
+            $this->payment_status = 'paid';
+        } else {
+            $this->payment_status = 'partial';
+        }
+
+        $this->saveQuietly();
     }
 }

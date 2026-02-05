@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\OrderModification;
 use App\Models\Dish;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -104,27 +105,77 @@ class OrderController extends Controller
     public function show(Order $order)
     {
         $order->load('items.dish');
-        
+
+        // An order is "closed" when it's delivered AND fully paid
+        $isClosed = $order->status === 'delivered' && $order->payment_status === 'paid';
+
         return response()->json([
             'success' => true,
             'order' => $order,
             'items' => $order->items,
+            'is_closed' => $isClosed,
         ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
+    public function addItems(Request $request, Order $order)
     {
-        //
-    }
+        $validated = $request->validate([
+            'items' => 'required|array|min:1',
+            'items.*.id' => 'required|exists:dishes,id',
+            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.price' => 'required|numeric|min:0',
+        ]);
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
+        if (in_array($order->status, ['delivered', 'cancelled'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pueden agregar items a una orden entregada o cancelada.',
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($order, $validated) {
+            $totalBefore = (float) $order->total;
+
+            foreach ($validated['items'] as $itemData) {
+                $dish = Dish::find($itemData['id']);
+
+                $orderItem = OrderItem::create([
+                    'order_id' => $order->id,
+                    'dish_id' => $itemData['id'],
+                    'quantity' => $itemData['quantity'],
+                    'unit_price' => $itemData['price'],
+                    'total_price' => $itemData['price'] * $itemData['quantity'],
+                ]);
+
+                $order->recalculateTotal();
+
+                OrderModification::create([
+                    'order_id' => $order->id,
+                    'order_item_id' => $orderItem->id,
+                    'type' => 'item_added',
+                    'dish_name' => $dish->name,
+                    'quantity' => $itemData['quantity'],
+                    'unit_price' => $itemData['price'],
+                    'total_before' => $totalBefore,
+                    'total_after' => $order->total,
+                    'modified_by' => 'QR Menu',
+                ]);
+
+                $totalBefore = (float) $order->total;
+            }
+
+            $order->refresh();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Items agregados exitosamente',
+                'order' => [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'total' => $order->total,
+                    'status' => $order->status,
+                ],
+            ]);
+        });
     }
 }

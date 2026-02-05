@@ -14,6 +14,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use App\Filament\Resources\Orders\RelationManagers\OrderItemRelationManager;
+use App\Filament\Resources\Orders\RelationManagers\PaymentRelationManager;
+use App\Filament\Resources\Orders\RelationManagers\OrderModificationRelationManager;
 
 class OrderResource extends Resource
 {
@@ -37,6 +39,8 @@ class OrderResource extends Resource
     {
         return [
             OrderItemRelationManager::class,
+            PaymentRelationManager::class,
+            OrderModificationRelationManager::class,
         ];
     }
 
