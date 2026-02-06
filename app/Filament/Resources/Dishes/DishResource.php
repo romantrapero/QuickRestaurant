@@ -11,8 +11,8 @@ use App\Models\Dish;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use UnitEnum;
 
 class DishResource extends Resource
 {
@@ -23,6 +23,10 @@ class DishResource extends Resource
     protected static ?string $recordTitleAttribute = 'name';
 
     protected static ?string $modelLabel = 'Platillo';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Menú';
+
+    protected static ?int $navigationSort = 2;
 
     public static function form(Schema $schema): Schema
     {

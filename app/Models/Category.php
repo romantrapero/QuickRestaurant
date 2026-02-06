@@ -10,12 +10,36 @@ class Category extends Model
     /** @use HasFactory<\Database\Factories\CategoryFactory> */
     use HasFactory;
 
+    public const STATION_COLD_BAR = 'cold_bar';
+
+    public const STATION_HOT_BAR = 'hot_bar';
+
+    public const STATION_CASHIER = 'cashier';
+
+    public const STATION_NONE = 'none';
+
     // Permitir asignación masiva en estos campos
     protected $fillable = [
         'name',
         'order',
         'is_active',
+        'print_station',
     ];
+
+    public static function getPrintStationOptions(): array
+    {
+        return [
+            self::STATION_COLD_BAR => 'Barra Fría',
+            self::STATION_HOT_BAR => 'Barra Caliente',
+            self::STATION_CASHIER => 'Caja',
+            self::STATION_NONE => 'No imprimir',
+        ];
+    }
+
+    public function getPrintStationLabelAttribute(): string
+    {
+        return self::getPrintStationOptions()[$this->print_station] ?? $this->print_station;
+    }
 
     public function dishes()
     {
@@ -47,6 +71,7 @@ class Category extends Model
         if ($category) {
             $category->update($data);
         }
+
         return $category;
     }
 
@@ -56,8 +81,10 @@ class Category extends Model
         $category = self::find($id);
         if ($category) {
             $category->delete();
+
             return true;
         }
+
         return false;
     }
 }

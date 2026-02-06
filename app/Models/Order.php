@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Order extends Model
 {
@@ -19,7 +20,7 @@ class Order extends Model
         'table_number',
         'customer_name',
         'customer_notes',
-        'completed_at'
+        'completed_at',
     ];
 
     protected $casts = [
@@ -30,10 +31,10 @@ class Order extends Model
     protected static function boot()
     {
         parent::boot();
-        
+
         static::creating(function ($order) {
             if (empty($order->order_number)) {
-                $order->order_number = 'ORD-' . date('YmdHis') . '-' . rand(100, 999);
+                $order->order_number = 'ORD-'.date('YmdHis').'-'.rand(100, 999);
             }
         });
     }
@@ -66,6 +67,26 @@ class Order extends Model
     public function modifications(): HasMany
     {
         return $this->hasMany(OrderModification::class);
+    }
+
+    public function table(): HasOne
+    {
+        return $this->hasOne(Table::class, 'orden_id');
+    }
+
+    public function getTableInfoAttribute(): ?array
+    {
+        $table = $this->table;
+        if (! $table) {
+            return null;
+        }
+
+        return [
+            'numero' => $table->numero,
+            'nombre' => $table->nombre,
+            'qr_access' => $table->qr_access,
+            'tiempo_ocupacion' => $table->tiempo_ocupacion,
+        ];
     }
 
     public function calculateTotal()

@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CashShift;
+use App\Models\Dish;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderModification;
-use App\Models\Dish;
+use App\Models\Table;
+use App\Services\PrinterService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -20,7 +24,40 @@ class OrderController extends Controller
             ->orderBy('created_at', 'desc')
             ->take(50)
             ->get();
-            
+
+        return response()->json([
+            'success' => true,
+            'orders' => $orders,
+            'count' => $orders->count(),
+        ]);
+    }
+
+    /**
+     * Get active orders (pending payment)
+     */
+    public function active()
+    {
+        $orders = Order::with(['items.dish', 'payments'])
+            ->whereIn('status', ['pending', 'preparing', 'ready'])
+            ->where('payment_status', '!=', 'paid')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($order) {
+                return [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'status' => $order->status,
+                    'payment_status' => $order->payment_status,
+                    'total' => $order->total,
+                    'table_number' => $order->table_number,
+                    'customer_name' => $order->customer_name,
+                    'amount_paid' => $order->amountPaid(),
+                    'amount_remaining' => $order->amountRemaining(),
+                    'created_at' => $order->created_at,
+                    'items' => $order->items,
+                ];
+            });
+
         return response()->json([
             'success' => true,
             'orders' => $orders,
@@ -33,6 +70,14 @@ class OrderController extends Controller
      */
     public function store(Request $request)
     {
+        // Verificar que haya turno abierto
+        if (! CashShift::isShiftOpen()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No hay turno abierto. Abre un turno de caja antes de crear órdenes.',
+            ], 422);
+        }
+
         // Validar datos de entrada
         $validated = $request->validate([
             'table' => 'required|string|max:255',
@@ -57,11 +102,11 @@ class OrderController extends Controller
             ]);
 
             $total = 0;
-            
+
             // Crear los items de la orden
             foreach ($validated['items'] as $itemData) {
                 $dish = Dish::find($itemData['id']);
-                
+
                 $orderItem = OrderItem::create([
                     'order_id' => $order->id,
                     'dish_id' => $itemData['id'],
@@ -69,13 +114,30 @@ class OrderController extends Controller
                     'unit_price' => $itemData['price'],
                     'total_price' => $itemData['price'] * $itemData['quantity'],
                 ]);
-                
+
                 $total += $orderItem->total_price;
             }
-            
+
             // Actualizar el total de la orden
             $order->update(['total' => $total]);
-            
+
+            // Si viene de una mesa, ocuparla
+            if ($validated['table']) {
+                $table = Table::where('numero', $validated['table'])->first();
+                if ($table && $table->estado === Table::ESTADO_DISPONIBLE) {
+                    $table->ocupar($order);
+                }
+            }
+
+            // Imprimir tickets a las estaciones correspondientes
+            $printResults = [];
+            try {
+                $printerService = new PrinterService;
+                $printResults = $printerService->printOrder($order);
+            } catch (\Exception $e) {
+                Log::error("Error al imprimir orden {$order->order_number}: ".$e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Orden creada exitosamente',
@@ -87,6 +149,7 @@ class OrderController extends Controller
                     'created_at' => $order->created_at->format('d/m/Y H:i'),
                 ],
                 'items_count' => $order->items()->count(),
+                'print_results' => $printResults,
             ], 201);
         });
     }
@@ -95,8 +158,8 @@ class OrderController extends Controller
     {
         $date = date('Ymd');
         $latest = Order::whereDate('created_at', today())->count();
-        
-        return 'ORD-' . $date . '-' . str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
+
+        return 'ORD-'.$date.'-'.str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -166,6 +229,15 @@ class OrderController extends Controller
 
             $order->refresh();
 
+            // Imprimir los nuevos items
+            $printResults = [];
+            try {
+                $printerService = new PrinterService;
+                $printResults = $printerService->printOrder($order);
+            } catch (\Exception $e) {
+                Log::error("Error al imprimir items adicionales {$order->order_number}: ".$e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Items agregados exitosamente',
@@ -175,6 +247,7 @@ class OrderController extends Controller
                     'total' => $order->total,
                     'status' => $order->status,
                 ],
+                'print_results' => $printResults,
             ]);
         });
     }

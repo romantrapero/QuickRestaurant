@@ -2,24 +2,31 @@
 
 namespace App\Livewire;
 
-use Livewire\Component;
-use Illuminate\Support\Facades\Auth;
 use App\Models\Category;
 use App\Models\Dish;
 use App\Models\Order;
 use App\Models\OrderItem;
-use Livewire\Attributes\Layout;
-use Livewire\Attributes\Title;
+use App\Models\Table;
+use Illuminate\Support\Facades\Auth;
+use Livewire\Component;
 
 class PosScreen extends Component
 {
     public function __construct()
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             abort(403, 'No autorizado');
         }
     }
+
     public $activeCategory = null;
+
+    public function getMesasActivas()
+    {
+        return Table::where('is_active', true)
+            ->orderByRaw('CAST(numero AS INTEGER)')
+            ->get();
+    }
 
     public function placeOrder($cartData, $table, $customer, $notes)
     {
@@ -34,7 +41,7 @@ class PosScreen extends Component
             'cart.*.quantity' => 'required|integer|min:1',
             'cart.*.price' => 'required|numeric|min:0',
         ]);
-        
+
         if ($validator->fails()) {
             return ['success' => false, 'message' => 'Datos inválidos', 'errors' => $validator->errors()];
         }
@@ -47,7 +54,7 @@ class PosScreen extends Component
 
         // Crear la orden
         $order = Order::create([
-            'order_number' => 'ORD-' . date('Ymd') . '-' . Str::upper(Str::random(4)),
+            'order_number' => 'ORD-'.date('Ymd').'-'.Str::upper(Str::random(4)),
             'status' => 'pending',
             'total' => $total,
             'table_number' => $table,
@@ -69,28 +76,28 @@ class PosScreen extends Component
 
         // Devolver respuesta de éxito
         return [
-            'success' => true, 
+            'success' => true,
             'message' => 'Orden creada exitosamente',
-            'order_number' => $order->order_number
+            'order_number' => $order->order_number,
         ];
     }
-    
+
     public function render()
     {
-        if (!Auth::check()) {
+        if (! Auth::check()) {
             abort(403, 'No autorizado');
         }
         $categories = Category::where('is_active', true)
             ->orderBy('order')
             ->get();
-            
+
         $dishes = Dish::where('is_available', true)
             ->when($this->activeCategory, function ($query) {
                 return $query->where('category_id', $this->activeCategory);
             })
             ->with('category')
             ->get();
-            
+
         return view('livewire.pos-screen', [
             'categories' => $categories,
             'dishes' => $dishes,

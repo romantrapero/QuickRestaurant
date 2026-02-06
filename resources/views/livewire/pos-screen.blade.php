@@ -1,5 +1,5 @@
 <div wire:id="pos-screen">
-    <div class="min-h-screen">
+    <div class="min-h-screen" style="padding-bottom: 70px;">
         <!-- Header -->
         <div class="bg-white shadow-lg" wire:ignore>
             <div class="container mx-auto px-4 py-4">
@@ -11,9 +11,20 @@
                         </h1>
                         <p class="text-gray-600">Sistema de Gestión de Órdenes para Restaurantes</p>
                     </div>
-                    <div class="text-right">
-                        <div class="text-2xl font-bold text-blue-600" id="current-time">--:--:--</div>
-                        <div class="text-gray-500" id="current-date">---</div>
+                    <div class="flex items-center gap-4">
+                        {{-- Shift Status Bar --}}
+                        <div id="shift-status-bar" class="flex items-center gap-2">
+                            {{-- Populated by JavaScript --}}
+                        </div>
+                        <div class="text-right">
+                            <a href="/mesas"
+                               class="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition mb-2">
+                                <i class="fas fa-th-large"></i>
+                                Gestión de Mesas
+                            </a>
+                            <div class="text-2xl font-bold text-blue-600" id="current-time">--:--:--</div>
+                            <div class="text-gray-500" id="current-date">---</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -107,11 +118,21 @@
                                     </label>
                                     <select id="table-type" class="w-full border border-gray-300 rounded-lg p-2">
                                         <option value="">Seleccionar...</option>
-                                        <option value="To Go">To Go</option>
-                                        <option value="Didi Food">Didi Food</option>
-                                        <option value="Uber Eats">Uber Eats</option>
-                                        <option value="Rappi">Rappi</option>
-                                        <option value="Otro">Otro</option>
+                                        @php $mesasActivas = $this->getMesasActivas(); @endphp
+                                        @if($mesasActivas->count() > 0)
+                                        <optgroup label="Mesas">
+                                            @foreach($mesasActivas as $mesa)
+                                            <option value="Mesa {{ $mesa->numero }}">Mesa {{ $mesa->numero }}{{ $mesa->nombre ? ' - '.$mesa->nombre : '' }}</option>
+                                            @endforeach
+                                        </optgroup>
+                                        @endif
+                                        <optgroup label="Delivery / Otros">
+                                            <option value="To Go">To Go</option>
+                                            <option value="Didi Food">Didi Food</option>
+                                            <option value="Uber Eats">Uber Eats</option>
+                                            <option value="Rappi">Rappi</option>
+                                            <option value="Otro">Otro</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                                 <div class="flex-1">
@@ -145,17 +166,17 @@
 
                         <!-- Totales -->
                         <div class="border-t pt-4 space-y-3">
-                            <div class="flex justify-between text-lg">
-                                <span class="text-gray-600">Subtotal:</span>
-                                <span class="font-semibold" id="subtotal">$0.00</span>
-                            </div>
-                            <div class="flex justify-between text-lg">
-                                <span class="text-gray-600">IVA (16%):</span>
-                                <span class="font-semibold" id="tax">$0.00</span>
-                            </div>
-                            <div class="flex justify-between text-2xl font-bold text-gray-800 border-t pt-3 mt-3">
+                            <div class="flex justify-between text-2xl font-bold text-gray-800">
                                 <span>TOTAL:</span>
                                 <span class="text-blue-600" id="total">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>Subtotal sin IVA:</span>
+                                <span id="subtotal">$0.00</span>
+                            </div>
+                            <div class="flex justify-between text-sm text-gray-500">
+                                <span>IVA incluido (16%):</span>
+                                <span id="tax">$0.00</span>
                             </div>
                         </div>
 
@@ -174,6 +195,208 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        {{-- ===== BARRA FLOTANTE ORDENES ACTIVAS ===== --}}
+        <div id="orders-bar" onclick="toggleOrdersDrawer()"
+             style="position:fixed; bottom:0; left:0; right:0; z-index:40; background:#059669; color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 -2px 10px rgba(0,0,0,0.15);">
+            <div style="display:flex; align-items:center; gap:12px;">
+                <span id="orders-count" style="background:#fff; color:#059669; font-weight:700; font-size:14px; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0 6px;">0</span>
+                <span id="orders-label" style="font-weight:600;">
+                    <i class="fas fa-receipt mr-2"></i>Órdenes Activas
+                </span>
+            </div>
+            <span style="font-weight:500;">
+                <i class="fas fa-chevron-up"></i>
+            </span>
+        </div>
+
+        {{-- ===== BACKDROP ORDENES ===== --}}
+        <div id="orders-backdrop" onclick="toggleOrdersDrawer()"
+             style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:40; opacity:0; pointer-events:none; transition:opacity 0.3s ease;"></div>
+
+        {{-- ===== DRAWER ORDENES ACTIVAS ===== --}}
+        <div id="orders-drawer"
+             style="position:fixed; bottom:0; left:0; right:0; z-index:50; background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -4px 20px rgba(0,0,0,0.15); max-height:85vh; display:flex; flex-direction:column; transform:translateY(100%); transition:transform 0.3s ease;">
+
+            {{-- Handle --}}
+            <div style="display:flex; justify-content:center; padding:12px 0 4px; cursor:pointer;" onclick="toggleOrdersDrawer()">
+                <div style="width:40px; height:4px; background:#d1d5db; border-radius:2px;"></div>
+            </div>
+
+            {{-- Header --}}
+            <div style="padding:0 16px 12px; border-bottom:1px solid #e5e7eb;">
+                <h2 style="font-size:18px; font-weight:700; color:#1f2937; margin:0;">
+                    <i class="fas fa-clipboard-list text-emerald-600 mr-2"></i> Órdenes por Cobrar
+                </h2>
+            </div>
+
+            {{-- Lista de ordenes (scrollable) --}}
+            <div id="orders-list" style="flex:1; overflow-y:auto; padding:12px 16px;">
+                <p class="text-center text-gray-400 py-8">Cargando órdenes...</p>
+            </div>
+        </div>
+
+        {{-- ===== DRAWER DETALLE ORDEN + COBRO ===== --}}
+        <div id="order-detail-drawer"
+             style="position:fixed; bottom:0; left:0; right:0; z-index:55; background:#fff; border-radius:16px 16px 0 0; box-shadow:0 -4px 20px rgba(0,0,0,0.15); max-height:90vh; display:flex; flex-direction:column; transform:translateY(100%); transition:transform 0.3s ease;">
+
+            {{-- Handle --}}
+            <div style="display:flex; justify-content:center; padding:12px 0 4px; cursor:pointer;" onclick="closeOrderDetail()">
+                <div style="width:40px; height:4px; background:#d1d5db; border-radius:2px;"></div>
+            </div>
+
+            {{-- Header con numero de orden --}}
+            <div style="padding:0 16px 12px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <h2 id="detail-order-number" style="font-size:18px; font-weight:700; color:#1f2937; margin:0;"></h2>
+                    <p id="detail-table-info" style="font-size:14px; color:#6b7280; margin:4px 0 0;"></p>
+                </div>
+                <button onclick="closeOrderDetail()" style="background:#f3f4f6; border:none; border-radius:50%; width:36px; height:36px; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                    <i class="fas fa-times text-gray-600"></i>
+                </button>
+            </div>
+
+            {{-- Contenido scrollable --}}
+            <div style="flex:1; overflow-y:auto; padding:16px;">
+                {{-- Items de la orden --}}
+                <div id="detail-items" style="margin-bottom:16px;"></div>
+
+                {{-- Resumen de pagos --}}
+                <div id="payment-summary" style="background:#f9fafb; border-radius:12px; padding:12px; margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#6b7280;">Total:</span>
+                        <span id="detail-total" style="font-weight:700;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                        <span style="color:#6b7280;">Pagado:</span>
+                        <span id="detail-paid" style="font-weight:600; color:#059669;"></span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; border-top:1px solid #e5e7eb; padding-top:8px;">
+                        <span style="font-weight:600;">Restante:</span>
+                        <span id="detail-remaining" style="font-weight:700; color:#dc2626;"></span>
+                    </div>
+                </div>
+
+                {{-- Formulario de cobro --}}
+                <div id="payment-form" style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px;">
+                    <h3 style="font-weight:600; margin:0 0 12px; font-size:16px;">
+                        <i class="fas fa-cash-register text-emerald-600 mr-2"></i>Registrar Pago
+                    </h3>
+
+                    {{-- Metodo de pago --}}
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:14px; color:#374151; margin-bottom:6px;">Método</label>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="payment-method-btn active" data-method="efectivo"
+                                    style="flex:1; padding:10px; border:2px solid #059669; background:#ecfdf5; border-radius:8px; cursor:pointer; font-weight:500; font-size:13px;">
+                                <i class="fas fa-money-bill-wave mr-1"></i> Efectivo
+                            </button>
+                            <button type="button" class="payment-method-btn" data-method="tarjeta"
+                                    style="flex:1; padding:10px; border:2px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; font-weight:500; font-size:13px;">
+                                <i class="fas fa-credit-card mr-1"></i> Tarjeta
+                            </button>
+                            <button type="button" class="payment-method-btn" data-method="transferencia"
+                                    style="flex:1; padding:10px; border:2px solid #e5e7eb; background:#fff; border-radius:8px; cursor:pointer; font-weight:500; font-size:13px;">
+                                <i class="fas fa-university mr-1"></i> Transf.
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Monto --}}
+                    <div style="margin-bottom:12px;">
+                        <label style="display:block; font-size:14px; color:#374151; margin-bottom:6px;">Monto</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="number" id="payment-amount" step="0.01" min="0"
+                                   style="flex:1; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:16px;">
+                            <button type="button" onclick="setFullPayment()"
+                                    style="background:#3b82f6; color:#fff; padding:10px 16px; border-radius:8px; border:none; cursor:pointer; font-weight:500;">
+                                Total
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Propina --}}
+                    <div style="margin-bottom:16px;">
+                        <label style="display:block; font-size:14px; color:#374151; margin-bottom:6px;">Propina (opcional)</label>
+                        <input type="number" id="payment-tip" step="0.01" min="0" value="0"
+                               style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:16px; box-sizing:border-box;">
+                    </div>
+
+                    {{-- Boton de cobrar --}}
+                    <button id="process-payment-btn" onclick="processPayment()"
+                            style="width:100%; background:#059669; color:#fff; padding:14px; border-radius:12px; border:none; cursor:pointer; font-weight:700; font-size:16px;">
+                        <i class="fas fa-check-circle mr-2"></i> Cobrar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {{-- ===== MODAL ABRIR TURNO ===== --}}
+        <div id="shift-open-modal" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:16px; padding:24px; max-width:400px; width:90%; margin:auto;">
+                <h3 style="font-size:20px; font-weight:700; margin:0 0 16px; color:#1f2937;">
+                    <i class="fas fa-cash-register text-green-600 mr-2"></i>Abrir Turno
+                </h3>
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:14px; color:#374151; margin-bottom:6px;">Fondo Inicial en Caja</label>
+                    <input type="number" id="shift-initial-cash" step="0.01" min="0" value="0" placeholder="0.00"
+                           style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:12px; font-size:18px; box-sizing:border-box;">
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <button onclick="closeShiftModal()" style="flex:1; background:#f3f4f6; color:#374151; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        Cancelar
+                    </button>
+                    <button onclick="confirmOpenShift()" style="flex:1; background:#059669; color:#fff; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        <i class="fas fa-play mr-1"></i> Abrir
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {{-- ===== MODAL CERRAR TURNO ===== --}}
+        <div id="shift-close-modal" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:16px; padding:24px; max-width:500px; width:90%; margin:auto; max-height:90vh; overflow-y:auto;">
+                <h3 style="font-size:20px; font-weight:700; margin:0 0 16px; color:#1f2937;">
+                    <i class="fas fa-calculator text-blue-600 mr-2"></i>Cerrar Turno
+                </h3>
+
+                {{-- Resumen del turno --}}
+                <div id="shift-summary" style="background:#f9fafb; border-radius:12px; padding:16px; margin-bottom:16px;">
+                    <p style="text-align:center; color:#6b7280;">Cargando resumen...</p>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:14px; color:#374151; margin-bottom:6px;">Notas del Cierre (opcional)</label>
+                    <textarea id="shift-close-notes" rows="2" placeholder="Observaciones..."
+                              style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:14px; box-sizing:border-box;"></textarea>
+                </div>
+                <div style="display:flex; gap:12px;">
+                    <button onclick="closeShiftModal()" style="flex:1; background:#f3f4f6; color:#374151; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        Cancelar
+                    </button>
+                    <button id="confirm-close-shift-btn" onclick="confirmCloseShift()" style="flex:1; background:#dc2626; color:#fff; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        <i class="fas fa-stop mr-1"></i> Cerrar Turno
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        {{-- ===== MODAL RESUMEN POST-CIERRE ===== --}}
+        <div id="shift-closed-modal" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:16px; padding:24px; max-width:500px; width:90%; margin:auto; max-height:90vh; overflow-y:auto;">
+                <div style="text-align:center; margin-bottom:16px;">
+                    <div style="width:60px; height:60px; background:#d1fae5; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 12px;">
+                        <i class="fas fa-check text-green-600 text-2xl"></i>
+                    </div>
+                    <h3 style="font-size:20px; font-weight:700; color:#1f2937; margin:0;">Turno Cerrado</h3>
+                </div>
+                <div id="shift-closed-summary" style="background:#f9fafb; border-radius:12px; padding:16px; margin-bottom:16px;">
+                </div>
+                <button onclick="closeShiftModal()" style="width:100%; background:#3b82f6; color:#fff; padding:12px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                    Aceptar
+                </button>
             </div>
         </div>
     </div>
@@ -415,18 +638,20 @@
         updateTotals(subtotal);
     }
 
-    function updateTotals(subtotal) {
-        const tax = subtotal * 0.16; // 16% IVA
-        const total = subtotal + tax;
-        
+    function updateTotals(itemsTotal) {
+        // Los precios ya incluyen IVA, calculamos el desglose
+        const total = itemsTotal; // Total a cobrar = suma de precios
+        const subtotalSinIva = total / 1.16; // Precio sin IVA
+        const ivaIncluido = total - subtotalSinIva; // IVA incluido en el precio
+
         const subtotalEl = document.getElementById('subtotal');
         const taxEl = document.getElementById('tax');
         const totalEl = document.getElementById('total');
         const totalText = document.getElementById('total-text');
-        
-        if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-        if (taxEl) taxEl.textContent = `$${tax.toFixed(2)}`;
+
         if (totalEl) totalEl.textContent = `$${total.toFixed(2)}`;
+        if (subtotalEl) subtotalEl.textContent = `$${subtotalSinIva.toFixed(2)}`;
+        if (taxEl) taxEl.textContent = `$${ivaIncluido.toFixed(2)}`;
         if (totalText) totalText.textContent = ` ($${total.toFixed(2)})`;
     }
 
@@ -435,13 +660,20 @@
     // =============================================
     async function handleConfirmOrder() {
         console.log('📝 Confirmando orden...');
-        
+
+        // Validar turno abierto
+        if (!currentShift) {
+            showNotification('Debes abrir un turno de caja primero', 'error');
+            openOpenShiftModal();
+            return;
+        }
+
         // Validaciones básicas
         if (cart.length === 0) {
             showNotification('El carrito está vacío', 'error');
             return;
         }
-        
+
         const tableType = document.getElementById('table-type')?.value;
         if (!tableType) {
             showNotification('Selecciona una mesa o tipo de orden', 'error');
@@ -656,4 +888,600 @@
     window.removeFromCart = removeFromCart;
     window.clearCart = clearCart;
     window.handleConfirmOrder = handleConfirmOrder;
+
+    // =============================================
+    // SISTEMA DE ÓRDENES ACTIVAS Y COBRO
+    // =============================================
+
+    let ordersDrawerOpen = false;
+    let orderDetailOpen = false;
+    let activeOrders = [];
+    let selectedOrder = null;
+    let selectedPaymentMethod = 'efectivo';
+
+    // =============================================
+    // ICONOS POR TIPO DE ORDEN
+    // =============================================
+    const orderTypeIcons = {
+        'didi': { icon: 'fa-motorcycle', color: '#ff6600', label: 'Didi Food' },
+        'uber': { icon: 'fa-car', color: '#000000', label: 'Uber Eats' },
+        'rappi': { icon: 'fa-bicycle', color: '#ff441f', label: 'Rappi' },
+        'mesa': { icon: 'fa-utensils', color: '#3b82f6', label: 'Mesa' },
+        'to go': { icon: 'fa-shopping-bag', color: '#059669', label: 'To Go' },
+        'default': { icon: 'fa-receipt', color: '#6b7280', label: 'Orden' }
+    };
+
+    function getOrderTypeIcon(tableNumber) {
+        const lower = (tableNumber || '').toLowerCase();
+        if (lower.includes('didi')) return orderTypeIcons['didi'];
+        if (lower.includes('uber')) return orderTypeIcons['uber'];
+        if (lower.includes('rappi')) return orderTypeIcons['rappi'];
+        if (lower.includes('mesa') || /^\d+$/.test(tableNumber)) return orderTypeIcons['mesa'];
+        if (lower.includes('to go') || lower.includes('togo')) return orderTypeIcons['to go'];
+        return orderTypeIcons['default'];
+    }
+
+    // =============================================
+    // TOGGLE DRAWER ÓRDENES
+    // =============================================
+    function toggleOrdersDrawer() {
+        ordersDrawerOpen = !ordersDrawerOpen;
+
+        document.getElementById('orders-drawer').style.transform =
+            ordersDrawerOpen ? 'translateY(0)' : 'translateY(100%)';
+
+        const backdrop = document.getElementById('orders-backdrop');
+        backdrop.style.opacity = ordersDrawerOpen ? '1' : '0';
+        backdrop.style.pointerEvents = ordersDrawerOpen ? 'auto' : 'none';
+
+        if (ordersDrawerOpen) {
+            loadActiveOrders();
+        }
+    }
+
+    // =============================================
+    // CARGAR ÓRDENES ACTIVAS
+    // =============================================
+    async function loadActiveOrders() {
+        const container = document.getElementById('orders-list');
+        container.innerHTML = '<p class="text-center text-gray-400 py-8"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</p>';
+
+        try {
+            const response = await fetch('/api/orders/active', {
+                headers: { 'Accept': 'application/json' }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.message || 'Error al cargar órdenes');
+
+            activeOrders = data.orders;
+            renderOrdersList();
+            updateOrdersBar();
+
+        } catch (error) {
+            console.error('Error cargando órdenes:', error);
+            container.innerHTML = `<p class="text-center text-red-500 py-8"><i class="fas fa-exclamation-circle mr-2"></i>${error.message}</p>`;
+        }
+    }
+
+    // =============================================
+    // RENDERIZAR LISTA DE ÓRDENES
+    // =============================================
+    function renderOrdersList() {
+        const container = document.getElementById('orders-list');
+
+        if (activeOrders.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-12 text-gray-400">
+                    <i class="fas fa-check-circle text-5xl text-gray-300 mb-4" style="display:block;"></i>
+                    <p class="font-medium" style="margin:0;">No hay órdenes pendientes</p>
+                    <p class="text-sm mt-1" style="margin-top:4px;">Las órdenes activas aparecerán aquí</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = activeOrders.map(order => {
+            const typeInfo = getOrderTypeIcon(order.table_number);
+            const statusColors = {
+                'pending': { bg: '#fef3c7', text: '#92400e', label: 'Pendiente' },
+                'preparing': { bg: '#dbeafe', text: '#1e40af', label: 'Preparando' },
+                'ready': { bg: '#d1fae5', text: '#065f46', label: 'Listo' }
+            };
+            const status = statusColors[order.status] || statusColors['pending'];
+
+            return `
+                <div onclick="openOrderDetail(${order.id})"
+                     style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:10px; cursor:pointer; transition:all 0.2s;"
+                     onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'"
+                     onmouseout="this.style.boxShadow='none'">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <div style="width:40px; height:40px; background:${typeInfo.color}15; border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                                <i class="fas ${typeInfo.icon}" style="color:${typeInfo.color};"></i>
+                            </div>
+                            <div>
+                                <p style="font-weight:700; color:#1f2937; margin:0;">${order.order_number}</p>
+                                <p style="font-size:13px; color:#6b7280; margin:2px 0 0;">${order.table_number || 'Sin mesa'}</p>
+                            </div>
+                        </div>
+                        <span style="background:${status.bg}; color:${status.text}; font-size:12px; font-weight:600; padding:4px 10px; border-radius:20px;">
+                            ${status.label}
+                        </span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #f3f4f6; padding-top:8px;">
+                        <span style="font-size:14px; color:#6b7280;">
+                            ${order.customer_name || 'Sin nombre'}
+                        </span>
+                        <div style="text-align:right;">
+                            <p style="font-weight:700; color:#1f2937; margin:0;">$${parseFloat(order.total).toFixed(2)}</p>
+                            ${order.amount_remaining > 0 ? `<p style="font-size:12px; color:#dc2626; margin:2px 0 0;">Debe: $${parseFloat(order.amount_remaining).toFixed(2)}</p>` : '<p style="font-size:12px; color:#059669; margin:2px 0 0;"><i class="fas fa-check mr-1"></i>Pagado</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // =============================================
+    // ACTUALIZAR BARRA DE ÓRDENES
+    // =============================================
+    function updateOrdersBar() {
+        const count = activeOrders.filter(o => o.amount_remaining > 0).length;
+        document.getElementById('orders-count').textContent = count;
+        document.getElementById('orders-label').innerHTML = count > 0
+            ? `<i class="fas fa-receipt mr-2"></i>${count} Orden${count > 1 ? 'es' : ''} por cobrar`
+            : '<i class="fas fa-check-circle mr-2"></i>Sin órdenes pendientes';
+    }
+
+    // =============================================
+    // ABRIR DETALLE DE ORDEN
+    // =============================================
+    function openOrderDetail(orderId) {
+        selectedOrder = activeOrders.find(o => o.id === orderId);
+        if (!selectedOrder) return;
+
+        orderDetailOpen = true;
+
+        // Llenar datos
+        document.getElementById('detail-order-number').textContent = selectedOrder.order_number;
+
+        const typeInfo = getOrderTypeIcon(selectedOrder.table_number);
+        document.getElementById('detail-table-info').innerHTML =
+            `<i class="fas ${typeInfo.icon} mr-1" style="color:${typeInfo.color}"></i> ${selectedOrder.table_number || 'Sin mesa'} - ${selectedOrder.customer_name || 'Sin nombre'}`;
+
+        // Renderizar items
+        const itemsContainer = document.getElementById('detail-items');
+        itemsContainer.innerHTML = (selectedOrder.items || []).map(item => `
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #f3f4f6;">
+                <div>
+                    <span style="font-weight:500;">${item.quantity}x</span>
+                    <span style="color:#374151;">${item.dish?.name || 'Item'}</span>
+                </div>
+                <span style="font-weight:600;">$${parseFloat(item.total_price).toFixed(2)}</span>
+            </div>
+        `).join('');
+
+        // Actualizar resumen de pagos
+        document.getElementById('detail-total').textContent = `$${parseFloat(selectedOrder.total).toFixed(2)}`;
+        document.getElementById('detail-paid').textContent = `$${parseFloat(selectedOrder.amount_paid || 0).toFixed(2)}`;
+        document.getElementById('detail-remaining').textContent = `$${parseFloat(selectedOrder.amount_remaining).toFixed(2)}`;
+
+        // Pre-llenar monto restante
+        document.getElementById('payment-amount').value = selectedOrder.amount_remaining.toFixed(2);
+        document.getElementById('payment-tip').value = '0';
+
+        // Reset método de pago
+        selectedPaymentMethod = 'efectivo';
+        document.querySelectorAll('.payment-method-btn').forEach(b => {
+            if (b.dataset.method === 'efectivo') {
+                b.style.border = '2px solid #059669';
+                b.style.background = '#ecfdf5';
+            } else {
+                b.style.border = '2px solid #e5e7eb';
+                b.style.background = '#fff';
+            }
+        });
+
+        // Mostrar/ocultar formulario de pago
+        const paymentForm = document.getElementById('payment-form');
+        if (selectedOrder.amount_remaining <= 0) {
+            paymentForm.style.display = 'none';
+        } else {
+            paymentForm.style.display = 'block';
+        }
+
+        // Abrir drawer
+        document.getElementById('order-detail-drawer').style.transform = 'translateY(0)';
+    }
+
+    // =============================================
+    // CERRAR DETALLE DE ORDEN
+    // =============================================
+    function closeOrderDetail() {
+        orderDetailOpen = false;
+        document.getElementById('order-detail-drawer').style.transform = 'translateY(100%)';
+        selectedOrder = null;
+    }
+
+    // =============================================
+    // SELECCIÓN DE MÉTODO DE PAGO
+    // =============================================
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.payment-method-btn')) {
+            const btn = e.target.closest('.payment-method-btn');
+            document.querySelectorAll('.payment-method-btn').forEach(b => {
+                b.style.border = '2px solid #e5e7eb';
+                b.style.background = '#fff';
+            });
+            btn.style.border = '2px solid #059669';
+            btn.style.background = '#ecfdf5';
+            selectedPaymentMethod = btn.dataset.method;
+        }
+    });
+
+    // =============================================
+    // LLENAR MONTO TOTAL
+    // =============================================
+    function setFullPayment() {
+        if (selectedOrder) {
+            document.getElementById('payment-amount').value = selectedOrder.amount_remaining.toFixed(2);
+        }
+    }
+
+    // =============================================
+    // PROCESAR PAGO
+    // =============================================
+    async function processPayment() {
+        if (!selectedOrder) return;
+
+        const amount = parseFloat(document.getElementById('payment-amount').value);
+        const tip = parseFloat(document.getElementById('payment-tip').value) || 0;
+
+        if (!amount || amount <= 0) {
+            showNotification('Ingresa un monto válido', 'error');
+            return;
+        }
+
+        const btn = document.getElementById('process-payment-btn');
+        const origHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando...';
+        btn.disabled = true;
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+            const response = await fetch(`/api/orders/${selectedOrder.id}/payments`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({
+                    method: selectedPaymentMethod,
+                    amount: amount,
+                    tip: tip
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) throw new Error(data.message || 'Error al procesar pago');
+
+            showNotification(`Pago de $${amount.toFixed(2)} registrado exitosamente`, 'success');
+
+            // Actualizar orden en la lista
+            const orderIndex = activeOrders.findIndex(o => o.id === selectedOrder.id);
+            if (orderIndex !== -1) {
+                activeOrders[orderIndex].amount_paid = data.order.amount_paid;
+                activeOrders[orderIndex].amount_remaining = data.order.amount_remaining;
+                activeOrders[orderIndex].payment_status = data.order.payment_status;
+
+                // Si está completamente pagada, remover de la lista
+                if (data.order.payment_status === 'paid') {
+                    activeOrders.splice(orderIndex, 1);
+                }
+            }
+
+            closeOrderDetail();
+            renderOrdersList();
+            updateOrdersBar();
+
+        } catch (error) {
+            console.error('Error procesando pago:', error);
+            showNotification(error.message, 'error');
+        } finally {
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+        }
+    }
+
+    // =============================================
+    // AUTO-REFRESH DE ÓRDENES
+    // =============================================
+    setInterval(() => {
+        if (ordersDrawerOpen && !orderDetailOpen) {
+            loadActiveOrders();
+        }
+    }, 30000); // Cada 30 segundos
+
+    // Cargar conteo inicial al cargar la página
+    document.addEventListener('DOMContentLoaded', function() {
+        // Cargar órdenes en background para mostrar contador
+        fetch('/api/orders/active', { headers: { 'Accept': 'application/json' } })
+            .then(res => res.json())
+            .then(data => {
+                activeOrders = data.orders || [];
+                updateOrdersBar();
+            })
+            .catch(err => console.error('Error cargando órdenes iniciales:', err));
+    });
+
+    // =============================================
+    // EXPORTAR FUNCIONES DE ÓRDENES
+    // =============================================
+    window.toggleOrdersDrawer = toggleOrdersDrawer;
+    window.openOrderDetail = openOrderDetail;
+    window.closeOrderDetail = closeOrderDetail;
+    window.setFullPayment = setFullPayment;
+    window.processPayment = processPayment;
+
+    // =============================================
+    // SISTEMA DE TURNOS (CORTE DE CAJA)
+    // =============================================
+
+    let currentShift = null;
+
+    // Cargar estado del turno al iniciar
+    document.addEventListener('DOMContentLoaded', function() {
+        loadShiftStatus();
+    });
+
+    async function loadShiftStatus() {
+        try {
+            const response = await fetch('/api/cash-shift/current', {
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+
+            currentShift = data.is_open ? data.shift : null;
+            renderShiftBar();
+        } catch (error) {
+            console.error('Error cargando estado del turno:', error);
+            renderShiftBar();
+        }
+    }
+
+    function renderShiftBar() {
+        const container = document.getElementById('shift-status-bar');
+        if (!container) return;
+
+        if (currentShift) {
+            container.innerHTML = `
+                <div style="display:flex; align-items:center; gap:8px; background:#ecfdf5; border:1px solid #059669; border-radius:8px; padding:8px 12px;">
+                    <div style="width:8px; height:8px; background:#059669; border-radius:50%; animation:pulse 2s infinite;"></div>
+                    <div>
+                        <div style="font-size:12px; color:#065f46; font-weight:600;">Turno Abierto</div>
+                        <div style="font-size:11px; color:#047857;">${currentShift.opened_at} - ${currentShift.opened_by}</div>
+                    </div>
+                    <button onclick="openCloseShiftModal()" style="background:#dc2626; color:#fff; border:none; border-radius:6px; padding:6px 10px; font-size:12px; cursor:pointer; font-weight:500; margin-left:8px;">
+                        <i class="fas fa-stop mr-1"></i>Cerrar
+                    </button>
+                </div>
+            `;
+        } else {
+            container.innerHTML = `
+                <button onclick="openOpenShiftModal()" style="display:flex; align-items:center; gap:8px; background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:10px 14px; cursor:pointer; font-weight:500; color:#92400e;">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Sin turno abierto</span>
+                    <span style="background:#059669; color:#fff; padding:4px 8px; border-radius:4px; font-size:12px;">Abrir</span>
+                </button>
+            `;
+        }
+    }
+
+    function openOpenShiftModal() {
+        document.getElementById('shift-initial-cash').value = '0';
+        document.getElementById('shift-open-modal').style.display = 'flex';
+    }
+
+    async function openCloseShiftModal() {
+        const modal = document.getElementById('shift-close-modal');
+        const summaryDiv = document.getElementById('shift-summary');
+
+        modal.style.display = 'flex';
+        summaryDiv.innerHTML = '<p style="text-align:center; color:#6b7280;"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando resumen...</p>';
+
+        try {
+            const response = await fetch('/api/cash-shift/current', {
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (data.is_open && data.shift) {
+                const s = data.shift;
+                summaryDiv.innerHTML = `
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                        <div>
+                            <div style="font-size:12px; color:#6b7280;">Abierto</div>
+                            <div style="font-weight:600;">${s.opened_at} por ${s.opened_by}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:12px; color:#6b7280;">Duración</div>
+                            <div style="font-weight:600;">${s.duration}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:12px; color:#6b7280;">Fondo Inicial</div>
+                            <div style="font-weight:600;">$${parseFloat(s.initial_cash).toFixed(2)}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:12px; color:#6b7280;">Órdenes Cobradas</div>
+                            <div style="font-weight:600;">${s.orders_count}</div>
+                        </div>
+                    </div>
+                    <div style="border-top:1px solid #e5e7eb; margin-top:12px; padding-top:12px;">
+                        <div style="font-size:12px; color:#6b7280; margin-bottom:4px;">Ventas del Turno</div>
+                        <div style="font-size:24px; font-weight:700; color:#059669;">$${parseFloat(s.total_sales).toFixed(2)}</div>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            summaryDiv.innerHTML = '<p style="text-align:center; color:#dc2626;">Error al cargar resumen</p>';
+        }
+    }
+
+    function closeShiftModal() {
+        document.getElementById('shift-open-modal').style.display = 'none';
+        document.getElementById('shift-close-modal').style.display = 'none';
+        document.getElementById('shift-closed-modal').style.display = 'none';
+    }
+
+    async function confirmOpenShift() {
+        const initialCash = parseFloat(document.getElementById('shift-initial-cash').value) || 0;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+
+        try {
+            const response = await fetch('/api/cash-shift/open', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({ initial_cash: initialCash })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                currentShift = data.shift;
+                renderShiftBar();
+                closeShiftModal();
+                showNotification('Turno abierto exitosamente', 'success');
+            } else {
+                showNotification(data.message || 'Error al abrir turno', 'error');
+            }
+        } catch (error) {
+            console.error('Error abriendo turno:', error);
+            showNotification('Error al abrir turno', 'error');
+        }
+    }
+
+    async function confirmCloseShift() {
+        const notes = document.getElementById('shift-close-notes').value;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        const btn = document.getElementById('confirm-close-shift-btn');
+
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Cerrando...';
+        btn.disabled = true;
+
+        try {
+            const response = await fetch('/api/cash-shift/close', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                body: JSON.stringify({ notes })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                currentShift = null;
+                renderShiftBar();
+                closeShiftModal();
+
+                // Mostrar resumen final
+                showClosedSummary(data.summary);
+            } else {
+                showNotification(data.message || 'Error al cerrar turno', 'error');
+            }
+        } catch (error) {
+            console.error('Error cerrando turno:', error);
+            showNotification('Error al cerrar turno', 'error');
+        } finally {
+            btn.innerHTML = '<i class="fas fa-stop mr-1"></i> Cerrar Turno';
+            btn.disabled = false;
+        }
+    }
+
+    function showClosedSummary(summary) {
+        const modal = document.getElementById('shift-closed-modal');
+        const summaryDiv = document.getElementById('shift-closed-summary');
+
+        const efectivo = summary.sales_by_method?.efectivo || 0;
+        const tarjeta = summary.sales_by_method?.tarjeta || 0;
+        const transferencia = summary.sales_by_method?.transferencia || 0;
+
+        summaryDiv.innerHTML = `
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px;">
+                <div>
+                    <div style="font-size:12px; color:#6b7280;">Apertura</div>
+                    <div style="font-weight:500;">${summary.opened_at}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#6b7280;">Cierre</div>
+                    <div style="font-weight:500;">${summary.closed_at}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#6b7280;">Duración</div>
+                    <div style="font-weight:500;">${summary.duration}</div>
+                </div>
+                <div>
+                    <div style="font-size:12px; color:#6b7280;">Órdenes</div>
+                    <div style="font-weight:500;">${summary.orders_count}</div>
+                </div>
+            </div>
+
+            <div style="border-top:1px solid #e5e7eb; padding-top:12px; margin-bottom:12px;">
+                <div style="font-size:14px; font-weight:600; margin-bottom:8px;">Ventas por Método</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#6b7280;"><i class="fas fa-money-bill-wave text-green-600 mr-1"></i>Efectivo</span>
+                    <span style="font-weight:500;">$${parseFloat(efectivo).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#6b7280;"><i class="fas fa-credit-card text-blue-600 mr-1"></i>Tarjeta</span>
+                    <span style="font-weight:500;">$${parseFloat(tarjeta).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="color:#6b7280;"><i class="fas fa-university text-yellow-600 mr-1"></i>Transferencia</span>
+                    <span style="font-weight:500;">$${parseFloat(transferencia).toFixed(2)}</span>
+                </div>
+            </div>
+
+            <div style="border-top:1px solid #e5e7eb; padding-top:12px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#6b7280;">Fondo Inicial</span>
+                    <span style="font-weight:500;">$${parseFloat(summary.initial_cash).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                    <span style="color:#6b7280;">Total Ventas</span>
+                    <span style="font-weight:600; color:#059669;">$${parseFloat(summary.total_sales).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span style="color:#6b7280;">Propinas</span>
+                    <span style="font-weight:500;">$${parseFloat(summary.total_tips).toFixed(2)}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; background:#ecfdf5; padding:8px; border-radius:6px;">
+                    <span style="font-weight:600; color:#065f46;">Efectivo Esperado</span>
+                    <span style="font-weight:700; color:#059669;">$${parseFloat(summary.expected_cash).toFixed(2)}</span>
+                </div>
+            </div>
+        `;
+
+        modal.style.display = 'flex';
+    }
+
+    // =============================================
+    // EXPORTAR FUNCIONES DE TURNOS
+    // =============================================
+    window.openOpenShiftModal = openOpenShiftModal;
+    window.openCloseShiftModal = openCloseShiftModal;
+    window.closeShiftModal = closeShiftModal;
+    window.confirmOpenShift = confirmOpenShift;
+    window.confirmCloseShift = confirmCloseShift;
 </script>

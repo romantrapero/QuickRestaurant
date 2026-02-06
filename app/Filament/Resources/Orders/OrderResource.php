@@ -2,20 +2,20 @@
 
 namespace App\Filament\Resources\Orders;
 
-use App\Filament\Resources\Orders\Pages\ViewOrder;
 use App\Filament\Resources\Orders\Pages\EditOrder;
 use App\Filament\Resources\Orders\Pages\ListOrders;
+use App\Filament\Resources\Orders\Pages\ViewOrder;
+use App\Filament\Resources\Orders\RelationManagers\OrderItemRelationManager;
+use App\Filament\Resources\Orders\RelationManagers\OrderModificationRelationManager;
+use App\Filament\Resources\Orders\RelationManagers\PaymentRelationManager;
 use App\Filament\Resources\Orders\Schemas\OrderForm;
 use App\Filament\Resources\Orders\Tables\OrdersTable;
 use App\Models\Order;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use App\Filament\Resources\Orders\RelationManagers\OrderItemRelationManager;
-use App\Filament\Resources\Orders\RelationManagers\PaymentRelationManager;
-use App\Filament\Resources\Orders\RelationManagers\OrderModificationRelationManager;
+use UnitEnum;
 
 class OrderResource extends Resource
 {
@@ -24,6 +24,10 @@ class OrderResource extends Resource
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-s-shopping-cart';
 
     protected static ?string $modelLabel = 'Orden';
+
+    protected static string|UnitEnum|null $navigationGroup = 'Pedidos';
+
+    protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
     {

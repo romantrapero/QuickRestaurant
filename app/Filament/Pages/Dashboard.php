@@ -2,21 +2,29 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Widgets\PaymentMethodsChart;
+use App\Filament\Widgets\RecentPayments;
+use App\Filament\Widgets\TodaySalesStats;
+use App\Filament\Widgets\WeeklySalesChart;
 use BackedEnum;
 use Filament\Pages\Dashboard as BaseDashboard;
-use Filament\Widgets\Widget;
-use App\Models\Order;
-use App\Models\Dish;
-use App\Models\Category;
-use App\Models\User;
 
 class Dashboard extends BaseDashboard
 {
     protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-home';
-    protected string $view = 'filament.pages.dashboard';
 
     public function getWidgets(): array
     {
-        // Agrega los widgets que deseas mostrar en el panel de control
+        return [
+            TodaySalesStats::class,
+            WeeklySalesChart::class,
+            PaymentMethodsChart::class,
+            RecentPayments::class,
+        ];
+    }
+
+    public function getColumns(): int|array
+    {
+        return 2;
     }
 }
