@@ -88,6 +88,60 @@ class PrinterService
         }
     }
 
+    /**
+     * Reprint a ticket to the cashier printer.
+     *
+     * @param  string  $ticketType  'cold_bar', 'hot_bar', or 'receipt'
+     */
+    public function reprintToCashier(Order $order, string $ticketType): bool
+    {
+        $cashierPrinter = Printer::findByStation(Printer::STATION_CASHIER);
+
+        if (! $cashierPrinter) {
+            Log::warning('No active cashier printer found for reprint');
+
+            return false;
+        }
+
+        $order->load('items.dish.category', 'payments');
+
+        try {
+            $connector = $cashierPrinter->getConnector();
+            $escpos = new EscposPrinter($connector);
+
+            if ($ticketType === 'receipt') {
+                $this->printCashierTicket($escpos, $order);
+            } else {
+                $stationLabel = match ($ticketType) {
+                    Printer::STATION_COLD_BAR => 'Barra Fría',
+                    Printer::STATION_HOT_BAR => 'Barra Caliente',
+                    default => $ticketType,
+                };
+
+                $items = $order->items->filter(function ($item) use ($ticketType) {
+                    return ($item->dish->category->print_station ?? 'none') === $ticketType;
+                })->values()->all();
+
+                if (empty($items)) {
+                    $escpos->close();
+
+                    return false;
+                }
+
+                $this->printKitchenTicket($escpos, $order, $items, $stationLabel.' (REIMPRESIÓN)');
+            }
+
+            $escpos->cut();
+            $escpos->close();
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error("Reprint error [{$ticketType}]: ".$e->getMessage());
+
+            return false;
+        }
+    }
+
     public function testPrinter(Printer $printer): bool
     {
         try {

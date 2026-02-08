@@ -2,15 +2,19 @@
 
 namespace App\Filament\Resources\Orders\Tables;
 
+use App\Models\Printer;
+use App\Services\PrinterService;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
+use Filament\Notifications\Notification;
+use Filament\Tables\Columns\BadgeColumn;
+use Filament\Tables\Columns\SelectColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
-use Filament\Tables\Columns\BadgeColumn;
-use Filament\Support\Colors\Color;
-use Filament\Tables\Columns\SelectColumn;
 
 class OrdersTable
 {
@@ -26,7 +30,7 @@ class OrdersTable
                     ->searchable(),
                 BadgeColumn::make('status_badge')
                     ->label('')
-                    ->getStateUsing(fn($record) => $record->status)
+                    ->getStateUsing(fn ($record) => $record->status)
                     ->colors([
                         'warning' => static fn ($state): bool => $state === 'pending',
                         'info' => static fn ($state): bool => $state === 'preparing',
@@ -69,7 +73,7 @@ class OrdersTable
                     ]),
                 TextColumn::make('total')
                     ->label('Total')
-                    ->formatStateUsing(fn($state) => '$' . number_format($state, 2))
+                    ->formatStateUsing(fn ($state) => '$'.number_format($state, 2))
                     ->sortable(),
                 TextColumn::make('table_number')
                     ->label('Tipo de Orden')
@@ -93,6 +97,43 @@ class OrdersTable
             ])
             ->recordActions([
                 EditAction::make(),
+                Action::make('reprint')
+                    ->label('Reimprimir')
+                    ->icon('heroicon-o-printer')
+                    ->color('warning')
+                    ->modalHeading('Reimprimir Ticket')
+                    ->modalDescription('Selecciona el tipo de ticket a reimprimir. Se imprimirá en la impresora de caja.')
+                    ->modalSubmitActionLabel('Imprimir')
+                    ->schema([
+                        Select::make('ticket_type')
+                            ->label('Tipo de Ticket')
+                            ->options([
+                                Printer::STATION_COLD_BAR => 'Barra Fría (Cocina)',
+                                Printer::STATION_HOT_BAR => 'Barra Caliente (Cocina)',
+                                'receipt' => 'Ticket de Venta (Cuenta)',
+                            ])
+                            ->required(),
+                    ])
+                    ->action(function (array $data, $record): void {
+                        $printerService = new PrinterService;
+                        $result = $printerService->reprintToCashier($record, $data['ticket_type']);
+
+                        if ($result) {
+                            Notification::make()
+                                ->title('Ticket reimpreso exitosamente')
+                                ->success()
+                                ->send();
+                        } else {
+                            $message = $data['ticket_type'] === 'receipt'
+                                ? 'No se pudo reimprimir. Verifica que la impresora de caja esté activa.'
+                                : 'No se pudo reimprimir. Verifica que la impresora esté activa o que la orden tenga items de esa estación.';
+                            Notification::make()
+                                ->title('Error al reimprimir')
+                                ->body($message)
+                                ->danger()
+                                ->send();
+                        }
+                    }),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

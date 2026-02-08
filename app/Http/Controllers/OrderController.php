@@ -180,6 +180,109 @@ class OrderController extends Controller
         ]);
     }
 
+    public function updateItem(Request $request, Order $order, OrderItem $orderItem): \Illuminate\Http\JsonResponse
+    {
+        $validated = $request->validate([
+            'quantity' => 'required|integer|min:1',
+        ]);
+
+        if (in_array($order->status, ['delivered', 'cancelled'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pueden modificar items de una orden entregada o cancelada.',
+            ], 422);
+        }
+
+        if ($orderItem->order_id !== $order->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El item no pertenece a esta orden.',
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($order, $orderItem, $validated) {
+            $totalBefore = (float) $order->total;
+            $dish = $orderItem->dish;
+
+            $orderItem->update([
+                'quantity' => $validated['quantity'],
+                'total_price' => $orderItem->unit_price * $validated['quantity'],
+            ]);
+
+            $order->recalculateTotal();
+
+            OrderModification::create([
+                'order_id' => $order->id,
+                'order_item_id' => $orderItem->id,
+                'type' => 'quantity_changed',
+                'dish_name' => $dish->name,
+                'quantity' => $validated['quantity'],
+                'unit_price' => $orderItem->unit_price,
+                'total_before' => $totalBefore,
+                'total_after' => $order->total,
+                'modified_by' => 'POS',
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cantidad actualizada',
+                'order' => [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'total' => $order->total,
+                ],
+            ]);
+        });
+    }
+
+    public function removeItem(Request $request, Order $order, OrderItem $orderItem): \Illuminate\Http\JsonResponse
+    {
+        if (in_array($order->status, ['delivered', 'cancelled'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pueden modificar items de una orden entregada o cancelada.',
+            ], 422);
+        }
+
+        if ($orderItem->order_id !== $order->id) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El item no pertenece a esta orden.',
+            ], 422);
+        }
+
+        return DB::transaction(function () use ($order, $orderItem, $request) {
+            $totalBefore = (float) $order->total;
+            $dish = $orderItem->dish;
+
+            OrderModification::create([
+                'order_id' => $order->id,
+                'order_item_id' => $orderItem->id,
+                'type' => 'item_removed',
+                'dish_name' => $dish->name,
+                'quantity' => $orderItem->quantity,
+                'unit_price' => $orderItem->unit_price,
+                'total_before' => $totalBefore,
+                'total_after' => $totalBefore - $orderItem->total_price,
+                'modified_by' => 'POS',
+                'reason' => $request->input('reason'),
+            ]);
+
+            $orderItem->delete();
+            $order->recalculateTotal();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Item eliminado exitosamente',
+                'order' => [
+                    'id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'total' => $order->total,
+                ],
+            ]);
+        });
+    }
+
     public function addItems(Request $request, Order $order)
     {
         $validated = $request->validate([

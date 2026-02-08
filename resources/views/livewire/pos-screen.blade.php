@@ -1,5 +1,5 @@
-<div wire:id="pos-screen">
-    <div class="min-h-screen" style="padding-bottom: 70px;">
+<div wire:id="pos-screen" class="pos-viewport">
+    <div class="flex-1 min-h-0 overflow-y-auto pos-content-scroll">
         <!-- Header -->
         <div class="bg-white shadow-lg" wire:ignore>
             <div class="container mx-auto px-4 py-4">
@@ -31,26 +31,26 @@
         </div>
 
         <!-- Contenido Principal -->
-        <div class="container mx-auto px-4 py-8">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="container mx-auto px-5 py-5">
+            <div class="grid grid-cols-1 lg:grid-cols-3" style="gap: 0.5rem;">
                 <!-- Panel Izquierdo - Menú -->
                 <div class="lg:col-span-2">
-                    <div class="bg-white rounded-xl shadow-lg p-6">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-6">
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:p-7">
+                        <h2 class="text-xl font-bold text-gray-800 mb-5">
                             <i class="fas fa-list-alt text-green-500 mr-2"></i>
                             Menú Disponible
                         </h2>
                         
                         <!-- Categorías -->
-                        <div class="mb-6">
+                        <div class="mb-5">
                             <div class="flex flex-wrap gap-2">
                                 <button wire:click="$set('activeCategory', null)"
-                                    class="category-btn px-4 py-2 rounded-lg font-semibold transition {{ is_null($activeCategory) ? 'active bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }}">
+                                    class="category-btn px-4 py-1.5 rounded-full text-sm font-semibold transition {{ is_null($activeCategory) ? 'active bg-blue-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
                                     Todos
                                 </button>
                                 @foreach($categories as $category)
                                     <button wire:click="$set('activeCategory', {{ $category->id }})"
-                                        class="category-btn px-4 py-2 rounded-lg font-semibold transition {{ $activeCategory == $category->id ? 'active bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300' }}">
+                                        class="category-btn px-4 py-1.5 rounded-full text-sm font-semibold transition {{ $activeCategory == $category->id ? 'active bg-blue-500 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' }}">
                                         {{ $category->name }}
                                     </button>
                                 @endforeach
@@ -58,31 +58,25 @@
                         </div>
 
                         <!-- Grid de Productos -->
-                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" wire:key="dishes-{{ $activeCategory }}">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" wire:key="dishes-{{ $activeCategory }}">
                             @forelse($dishes as $dish)
-                                <div class="dish-card border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer bg-white">
-                                    <div>
-                                        <h3 class="font-bold text-lg text-gray-800">{{ $dish->name }}</h3>
-                                        @if(!empty($dish->image_url))
-                                            <img src="{{ asset('storage/dishes/' . $dish->image_url) }}" alt="{{ $dish->name }}" class="w-full h-32 object-cover rounded-lg shadow mb-2">
-                                        @else
-                                            <div class="w-full h-32 bg-gray-200 flex items-center justify-center rounded-lg mb-2 text-gray-400">
-                                                <i class="fas fa-image fa-2x"></i>
-                                            </div>
-                                        @endif
-                                    </div>
-                                    <div class="mt-4 flex justify-between items-center">
-                                        <div>
-                                            <div class="text-2xl font-bold text-blue-600">${{ number_format($dish->sale_price, 2) }}</div>
-                                            {{-- <div class="text-xs text-gray-500">
-                                                Costo: ${{ number_format($dish->cost_price, 2) }} • 
-                                                Margen: ${{ number_format($dish->sale_price - $dish->cost_price, 2) }}
-                                            </div> --}}
+                                <div class="dish-card flex flex-col border border-gray-200/80 rounded-2xl overflow-hidden bg-white active:scale-[0.97] shadow-sm"
+                                     onclick="addToCart({{ $dish->id }}, '{{ addslashes($dish->name) }}', {{ $dish->sale_price }}, this.querySelector('.add-btn'))">
+                                    @if(!empty($dish->image_url))
+                                        <img src="{{ asset('storage/dishes/' . $dish->image_url) }}" alt="{{ $dish->name }}" class="w-full h-28 object-cover">
+                                    @else
+                                        <div class="w-full h-28 bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center text-gray-300">
+                                            <i class="fas fa-utensils text-2xl"></i>
                                         </div>
-                                        <button class="bg-blue-500 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-600 transition"
-                                                onclick="addToCart({{ $dish->id }}, '{{ addslashes($dish->name) }}', {{ $dish->sale_price }}, this)">
-                                            <i class="fas fa-plus mr-1"></i> Agregar
-                                        </button>
+                                    @endif
+                                    <div class="flex flex-col grow p-3">
+                                        <h3 class="font-semibold text-[13px] text-gray-800 leading-tight line-clamp-2 mb-auto">{{ $dish->name }}</h3>
+                                        <div class="flex justify-between items-center mt-2">
+                                            <span class="text-lg font-bold text-gray-900">${{ number_format($dish->sale_price, 2) }}</span>
+                                            <span class="add-btn inline-flex items-center justify-center w-8 h-8 bg-blue-500 text-white rounded-full text-sm shadow-sm">
+                                                <i class="fas fa-plus"></i>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             @empty
@@ -96,8 +90,8 @@
 
                 <!-- Panel Derecho - Carrito (wire:ignore para que Livewire no lo toque) -->
                 <div class="lg:col-span-1" wire:ignore>
-                    <div class="bg-white rounded-xl shadow-lg p-6 sticky top-6">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-6 pb-3">
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:p-7 sticky top-4">
+                        <h2 class="text-xl font-bold text-gray-800 mb-5 pb-2">
                             <i class="fas fa-shopping-cart text-orange-500 mr-2"></i>
                             Orden Actual
                         </h2>
@@ -198,9 +192,12 @@
             </div>
         </div>
 
-        {{-- ===== BARRA FLOTANTE ORDENES ACTIVAS ===== --}}
-        <div id="orders-bar" onclick="toggleOrdersDrawer()"
-             style="position:fixed; bottom:0; left:0; right:0; z-index:40; background:#059669; color:#fff; padding:14px 20px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 -2px 10px rgba(0,0,0,0.15);">
+    </div>{{-- cierra div scrollable --}}
+
+    {{-- ===== BARRA ORDENES ACTIVAS ===== --}}
+    <div id="orders-bar" onclick="toggleOrdersDrawer()"
+         class="shrink-0"
+         style="background:#059669; color:#fff; padding:14px 20px; padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px)); display:flex; align-items:center; justify-content:space-between; cursor:pointer; box-shadow:0 -2px 10px rgba(0,0,0,0.15);">
             <div style="display:flex; align-items:center; gap:12px;">
                 <span id="orders-count" style="background:#fff; color:#059669; font-weight:700; font-size:14px; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; padding:0 6px;">0</span>
                 <span id="orders-label" style="font-weight:600;">
@@ -399,7 +396,6 @@
                 </button>
             </div>
         </div>
-    </div>
 </div>
 <script>
     // =============================================
@@ -409,24 +405,25 @@
     // Carrito en memoria con persistencia en localStorage
     let cart = JSON.parse(localStorage.getItem('quickrestaurant_cart')) || [];
 
+    // Estado del modo edicion
+    let editingOrderId = null;
+    let editingOrderNumber = null;
+    let originalItems = [];
+
     // =============================================
     // INICIALIZACIÓN
     // =============================================
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('🔄 Inicializando sistema POS...');
-        
-        // Configurar eventos
+        // Proteccion: limpiar items huerfanos de edicion previa
+        if (cart.some(item => item.isOriginal) && !editingOrderId) {
+            cart = [];
+            localStorage.removeItem('quickrestaurant_cart');
+        }
+
         setupEventListeners();
-        
-        // Actualizar visualizaciones
         updateCartDisplay();
         updateTime();
-        
-        // Auto-actualizar hora
         setInterval(updateTime, 1000);
-        
-        console.log('✅ Sistema POS inicializado');
-        console.log('📦 Carrito cargado:', cart.length, 'items');
     });
 
     // =============================================
@@ -455,53 +452,45 @@
     // GESTIÓN DEL CARRITO
     // =============================================
     function addToCart(id, name, price, buttonElement) {
-        console.log('➕ Agregando al carrito:', { id, name, price });
-        
-        // Buscar si ya existe en el carrito
-        const existingItemIndex = cart.findIndex(item => item.id === id);
-        
-        if (existingItemIndex !== -1) {
-            // Incrementar cantidad si ya existe
-            cart[existingItemIndex].quantity += 1;
-            cart[existingItemIndex].total = cart[existingItemIndex].quantity * cart[existingItemIndex].price;
+        if (editingOrderId) {
+            const existingNewItem = cart.find(item => item.id === id && !item.isOriginal);
+            if (existingNewItem) {
+                existingNewItem.quantity += 1;
+                existingNewItem.total = existingNewItem.quantity * existingNewItem.price;
+            } else {
+                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price), isOriginal: false });
+            }
         } else {
-            // Agregar nuevo item
-            cart.push({
-                id: id,
-                name: name,
-                price: parseFloat(price),
-                quantity: 1,
-                total: parseFloat(price)
-            });
+            const existingItemIndex = cart.findIndex(item => item.id === id);
+            if (existingItemIndex !== -1) {
+                cart[existingItemIndex].quantity += 1;
+                cart[existingItemIndex].total = cart[existingItemIndex].quantity * cart[existingItemIndex].price;
+            } else {
+                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price) });
+            }
         }
-        
-        // Guardar en localStorage
         saveCart();
-        
-        // Actualizar visualización
         updateCartDisplay();
-        
-        // Efecto visual en el botón
-        if (buttonElement) {
-            animateAddButton(buttonElement);
-        }
-        
-        // Notificación
+        if (buttonElement) animateAddButton(buttonElement);
         showNotification(`${name} agregado al carrito`, 'success');
     }
 
     function updateQuantity(id, change) {
-        const itemIndex = cart.findIndex(item => item.id === id);
-        
+        let itemIndex;
+        if (typeof id === 'string' && id.startsWith('orig-')) {
+            const oId = parseInt(id.replace('orig-', ''));
+            itemIndex = cart.findIndex(item => item.isOriginal && item.orderItemId === oId);
+        } else {
+            itemIndex = cart.findIndex(item => !item.isOriginal && item.id === id);
+            if (itemIndex === -1) itemIndex = cart.findIndex(item => item.id === id);
+        }
+
         if (itemIndex !== -1) {
             cart[itemIndex].quantity += change;
-            
             if (cart[itemIndex].quantity <= 0) {
-                // Eliminar si la cantidad es 0 o menos
                 cart.splice(itemIndex, 1);
                 showNotification('Item eliminado', 'info');
             } else {
-                // Actualizar total
                 cart[itemIndex].total = cart[itemIndex].quantity * cart[itemIndex].price;
             }
             
@@ -511,12 +500,17 @@
     }
 
     function removeFromCart(id) {
-        const itemIndex = cart.findIndex(item => item.id === id);
-        
+        let itemIndex;
+        if (typeof id === 'string' && id.startsWith('orig-')) {
+            const oId = parseInt(id.replace('orig-', ''));
+            itemIndex = cart.findIndex(item => item.isOriginal && item.orderItemId === oId);
+        } else {
+            itemIndex = cart.findIndex(item => !item.isOriginal && item.id === id);
+            if (itemIndex === -1) itemIndex = cart.findIndex(item => item.id === id);
+        }
         if (itemIndex !== -1) {
             const itemName = cart[itemIndex].name;
             cart.splice(itemIndex, 1);
-            
             saveCart();
             updateCartDisplay();
             showNotification(`${itemName} eliminado`, 'info');
@@ -599,22 +593,27 @@
         
         cart.forEach(item => {
             subtotal += item.total;
+            const itemKey = item.isOriginal ? `'orig-${item.orderItemId}'` : item.id;
+            const bgClass = item.isOriginal ? 'bg-gray-50' : '';
+            const badge = item.isOriginal
+                ? '<span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded ml-2"><i class="fas fa-check text-[10px] mr-0.5"></i>Existente</span>'
+                : (editingOrderId ? '<span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-2">Nuevo</span>' : '');
             cartHTML += `
-                <div class="cart-item flex justify-between items-center border-b pb-3">
+                <div class="cart-item flex justify-between items-center border-b pb-3 ${bgClass}">
                     <div class="flex-1">
-                        <div class="font-semibold text-gray-800">${item.name}</div>
+                        <div class="font-semibold text-gray-800">${item.name}${badge}</div>
                         <div class="text-sm text-gray-600">$${item.price.toFixed(2)} c/u</div>
                         <div class="flex items-center mt-2">
-                            <button onclick="updateQuantity(${item.id}, -1)" 
+                            <button onclick="updateQuantity(${itemKey}, -1)"
                                     class="w-7 h-7 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition">
                                 <i class="fas fa-minus text-xs"></i>
                             </button>
                             <span class="mx-3 font-medium text-center min-w-[20px]">${item.quantity}</span>
-                            <button onclick="updateQuantity(${item.id}, 1)" 
+                            <button onclick="updateQuantity(${itemKey}, 1)"
                                     class="w-7 h-7 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition">
                                 <i class="fas fa-plus text-xs"></i>
                             </button>
-                            <button onclick="removeFromCart(${item.id})" 
+                            <button onclick="removeFromCart(${itemKey})"
                                     class="ml-4 text-red-500 hover:text-red-700 transition">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
@@ -659,6 +658,11 @@
     // CONFIRMACIÓN DE ORDEN (CORREGIDA)
     // =============================================
     async function handleConfirmOrder() {
+        // Si estamos en modo edición, delegar a handleSaveEdits
+        if (editingOrderId) {
+            return handleSaveEdits();
+        }
+
         console.log('📝 Confirmando orden...');
 
         // Validar turno abierto
@@ -992,10 +996,7 @@
             const status = statusColors[order.status] || statusColors['pending'];
 
             return `
-                <div onclick="openOrderDetail(${order.id})"
-                     style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:10px; cursor:pointer; transition:all 0.2s;"
-                     onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'"
-                     onmouseout="this.style.boxShadow='none'">
+                <div style="background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-bottom:10px; transition:all 0.2s;">
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
                         <div style="display:flex; align-items:center; gap:10px;">
                             <div style="width:40px; height:40px; background:${typeInfo.color}15; border-radius:10px; display:flex; align-items:center; justify-content:center;">
@@ -1018,6 +1019,16 @@
                             <p style="font-weight:700; color:#1f2937; margin:0;">$${parseFloat(order.total).toFixed(2)}</p>
                             ${order.amount_remaining > 0 ? `<p style="font-size:12px; color:#dc2626; margin:2px 0 0;">Debe: $${parseFloat(order.amount_remaining).toFixed(2)}</p>` : '<p style="font-size:12px; color:#059669; margin:2px 0 0;"><i class="fas fa-check mr-1"></i>Pagado</p>'}
                         </div>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px; border-top:1px solid #f3f4f6; padding-top:8px;" onclick="event.stopPropagation()">
+                        <button onclick="editOrder(${order.id})"
+                                style="flex:1; padding:6px 0; font-size:13px; font-weight:600; color:#92400e; background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; cursor:pointer;">
+                            <i class="fas fa-edit mr-1"></i> Editar
+                        </button>
+                        <button onclick="openOrderDetail(${order.id})"
+                                style="flex:1; padding:6px 0; font-size:13px; font-weight:600; color:#065f46; background:#d1fae5; border:1px solid #10b981; border-radius:6px; cursor:pointer;">
+                            <i class="fas fa-cash-register mr-1"></i> Cobrar
+                        </button>
                     </div>
                 </div>
             `;
@@ -1220,6 +1231,189 @@
     });
 
     // =============================================
+    // MODO EDICIÓN DE ÓRDENES
+    // =============================================
+    async function editOrder(orderId) {
+        const order = activeOrders.find(o => o.id === orderId);
+        if (!order) {
+            showNotification('Orden no encontrada', 'error');
+            return;
+        }
+
+        // Cargar items en el carrito como originales
+        cart = (order.items || []).map(item => ({
+            id: item.dish_id || item.dish?.id,
+            orderItemId: item.id,
+            name: item.dish?.name || 'Item',
+            price: parseFloat(item.unit_price),
+            quantity: item.quantity,
+            total: parseFloat(item.total_price),
+            isOriginal: true
+        }));
+
+        // Guardar snapshot original para diff
+        originalItems = cart.map(item => ({ ...item }));
+
+        editingOrderId = order.id;
+        editingOrderNumber = order.order_number;
+
+        // Cerrar drawer de órdenes
+        toggleOrdersDrawer();
+
+        // Llenar mesa y cliente
+        const tableEl = document.getElementById('table-type');
+        const customerEl = document.getElementById('customer-name');
+        if (tableEl) { tableEl.value = order.table_number || ''; tableEl.disabled = true; }
+        if (customerEl) { customerEl.value = order.customer_name || ''; customerEl.disabled = true; }
+
+        saveCart();
+        updateCartDisplay();
+        updateEditModeUI(true);
+
+        showNotification(`Editando orden ${order.order_number}`, 'info');
+    }
+
+    function updateEditModeUI(isEditing) {
+        const confirmBtn = document.getElementById('confirm-order');
+        const clearBtn = document.getElementById('clear-cart');
+        const cartTitle = document.querySelector('#cart-items')?.closest('.bg-white')?.querySelector('h3, .font-bold');
+
+        if (isEditing) {
+            // Banner de edición
+            let banner = document.getElementById('edit-mode-banner');
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'edit-mode-banner';
+                banner.style.cssText = 'background:#fef3c7; border:1px solid #f59e0b; border-radius:8px; padding:8px 12px; margin-bottom:8px; display:flex; align-items:center; gap:8px;';
+                banner.innerHTML = `<i class="fas fa-edit text-amber-600"></i><span style="font-size:13px; font-weight:600; color:#92400e;">Editando: ${editingOrderNumber}</span>`;
+                const cartContainer = document.getElementById('cart-items');
+                if (cartContainer) cartContainer.parentElement.insertBefore(banner, cartContainer);
+            }
+
+            if (confirmBtn) {
+                confirmBtn.innerHTML = '<i class="fas fa-save mr-2"></i> Guardar Cambios';
+                confirmBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                confirmBtn.classList.add('bg-amber-600', 'hover:bg-amber-700');
+            }
+            if (clearBtn) {
+                clearBtn.innerHTML = '<i class="fas fa-times mr-2"></i> Cancelar';
+                clearBtn.removeEventListener('click', clearCart);
+                clearBtn.addEventListener('click', cancelEditMode);
+            }
+        } else {
+            // Remover banner
+            const banner = document.getElementById('edit-mode-banner');
+            if (banner) banner.remove();
+
+            if (confirmBtn) {
+                confirmBtn.innerHTML = '<i class="fas fa-check mr-2"></i> Confirmar Orden';
+                confirmBtn.classList.remove('bg-amber-600', 'hover:bg-amber-700');
+                confirmBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+            }
+            if (clearBtn) {
+                clearBtn.innerHTML = '<i class="fas fa-trash mr-2"></i> Limpiar Todo';
+                clearBtn.removeEventListener('click', cancelEditMode);
+                clearBtn.addEventListener('click', clearCart);
+            }
+
+            // Rehabilitar campos
+            const tableEl = document.getElementById('table-type');
+            const customerEl = document.getElementById('customer-name');
+            if (tableEl) tableEl.disabled = false;
+            if (customerEl) customerEl.disabled = false;
+        }
+    }
+
+    function cancelEditMode() {
+        if (!confirm('¿Cancelar la edición? Los cambios no guardados se perderán.')) return;
+
+        editingOrderId = null;
+        editingOrderNumber = null;
+        originalItems = [];
+        cart = [];
+        localStorage.removeItem('quickrestaurant_cart');
+
+        updateEditModeUI(false);
+        updateCartDisplay();
+
+        // Limpiar campos
+        const tableEl = document.getElementById('table-type');
+        const customerEl = document.getElementById('customer-name');
+        if (tableEl) { tableEl.value = ''; tableEl.disabled = false; }
+        if (customerEl) { customerEl.value = ''; customerEl.disabled = false; }
+
+        showNotification('Edición cancelada', 'info');
+    }
+
+    async function handleSaveEdits() {
+        const confirmBtn = document.getElementById('confirm-order');
+        const origHTML = confirmBtn.innerHTML;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Guardando...';
+        confirmBtn.disabled = true;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken };
+
+        try {
+            // 1. Items eliminados (estaban en original, ya no están en cart)
+            for (const orig of originalItems) {
+                const stillExists = cart.find(c => c.isOriginal && c.orderItemId === orig.orderItemId);
+                if (!stillExists) {
+                    const res = await fetch(`/api/orders/${editingOrderId}/items/${orig.orderItemId}`, {
+                        method: 'DELETE', headers, body: JSON.stringify({ reason: 'Eliminado desde POS' })
+                    });
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Error eliminando item'); }
+                }
+            }
+
+            // 2. Items con cantidad cambiada
+            for (const item of cart.filter(c => c.isOriginal)) {
+                const orig = originalItems.find(o => o.orderItemId === item.orderItemId);
+                if (orig && orig.quantity !== item.quantity) {
+                    const res = await fetch(`/api/orders/${editingOrderId}/items/${item.orderItemId}`, {
+                        method: 'PUT', headers, body: JSON.stringify({ quantity: item.quantity })
+                    });
+                    if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Error actualizando item'); }
+                }
+            }
+
+            // 3. Items nuevos
+            const newItems = cart.filter(c => !c.isOriginal);
+            if (newItems.length > 0) {
+                const res = await fetch(`/api/orders/${editingOrderId}/items`, {
+                    method: 'POST', headers,
+                    body: JSON.stringify({ items: newItems.map(i => ({ id: i.id, quantity: i.quantity, price: i.price })) })
+                });
+                if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Error agregando items'); }
+            }
+
+            showNotification(`Orden ${editingOrderNumber} actualizada exitosamente`, 'success');
+
+            // Salir del modo edición
+            editingOrderId = null;
+            editingOrderNumber = null;
+            originalItems = [];
+            cart = [];
+            localStorage.removeItem('quickrestaurant_cart');
+
+            updateEditModeUI(false);
+            updateCartDisplay();
+
+            const tableEl = document.getElementById('table-type');
+            const customerEl = document.getElementById('customer-name');
+            if (tableEl) { tableEl.value = ''; tableEl.disabled = false; }
+            if (customerEl) { customerEl.value = ''; customerEl.disabled = false; }
+
+        } catch (error) {
+            console.error('Error guardando edición:', error);
+            showNotification(error.message || 'Error al guardar cambios', 'error');
+        } finally {
+            confirmBtn.innerHTML = origHTML;
+            confirmBtn.disabled = cart.length === 0;
+        }
+    }
+
+    // =============================================
     // EXPORTAR FUNCIONES DE ÓRDENES
     // =============================================
     window.toggleOrdersDrawer = toggleOrdersDrawer;
@@ -1227,6 +1421,8 @@
     window.closeOrderDetail = closeOrderDetail;
     window.setFullPayment = setFullPayment;
     window.processPayment = processPayment;
+    window.editOrder = editOrder;
+    window.cancelEditMode = cancelEditMode;
 
     // =============================================
     // SISTEMA DE TURNOS (CORTE DE CAJA)

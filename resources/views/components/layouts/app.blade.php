@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'QuickRestaurant OMS - Ordering' }}</title>
     
@@ -20,11 +20,23 @@
             background-color: #3b82f6;
             color: white;
         }
-        .dish-card:hover {
-            transform: translateY(-2px);
-            transition: transform 0.2s;
+        .dish-card {
+            transition: transform 0.15s, box-shadow 0.15s;
         }
         [x-cloak] { display: none !important; }
+
+        /* iPad POS optimizations */
+        .pos-viewport {
+            height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+        .pos-content-scroll {
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: none;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
