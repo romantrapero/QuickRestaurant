@@ -9,6 +9,7 @@ use App\Models\OrderItem;
 use App\Models\OrderModification;
 use App\Models\Table;
 use App\Services\PrinterService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -89,77 +90,92 @@ class OrderController extends Controller
             'items.*.price' => 'required|numeric|min:0',
         ]);
 
-        // Usar transacción para asegurar integridad
-        return DB::transaction(function () use ($validated) {
-            // Crear la orden
-            $order = Order::create([
-                'order_number' => $this->generateOrderNumber(),
-                'status' => 'pending',
-                'table_number' => $validated['table'],
-                'customer_name' => $validated['customer'] ?? 'Cliente no identificado',
-                'customer_notes' => $validated['notes'] ?? null,
-                'total' => 0, // Se calculará después
-            ]);
+        // Usar transacción para asegurar integridad, con retry por si hay race condition
+        $attempts = 0;
+        retry:
+        $attempts++;
 
-            $total = 0;
-
-            // Crear los items de la orden
-            foreach ($validated['items'] as $itemData) {
-                $dish = Dish::find($itemData['id']);
-
-                $orderItem = OrderItem::create([
-                    'order_id' => $order->id,
-                    'dish_id' => $itemData['id'],
-                    'quantity' => $itemData['quantity'],
-                    'unit_price' => $itemData['price'],
-                    'total_price' => $itemData['price'] * $itemData['quantity'],
+        try {
+            return DB::transaction(function () use ($validated) {
+                // Crear la orden
+                $order = Order::create([
+                    'order_number' => $this->generateOrderNumber(),
+                    'status' => 'pending',
+                    'table_number' => $validated['table'],
+                    'customer_name' => $validated['customer'] ?? 'Cliente no identificado',
+                    'customer_notes' => $validated['notes'] ?? null,
+                    'total' => 0, // Se calculará después
                 ]);
 
-                $total += $orderItem->total_price;
-            }
+                $total = 0;
 
-            // Actualizar el total de la orden
-            $order->update(['total' => $total]);
+                // Crear los items de la orden
+                foreach ($validated['items'] as $itemData) {
+                    $dish = Dish::find($itemData['id']);
 
-            // Si viene de una mesa, ocuparla
-            if ($validated['table']) {
-                $table = Table::where('numero', $validated['table'])->first();
-                if ($table && $table->estado === Table::ESTADO_DISPONIBLE) {
-                    $table->ocupar($order);
+                    $orderItem = OrderItem::create([
+                        'order_id' => $order->id,
+                        'dish_id' => $itemData['id'],
+                        'quantity' => $itemData['quantity'],
+                        'unit_price' => $itemData['price'],
+                        'total_price' => $itemData['price'] * $itemData['quantity'],
+                    ]);
+
+                    $total += $orderItem->total_price;
                 }
-            }
 
-            // Imprimir tickets a las estaciones correspondientes
-            $printResults = [];
-            try {
-                $printerService = new PrinterService;
-                $printResults = $printerService->printOrder($order);
-            } catch (\Exception $e) {
-                Log::error("Error al imprimir orden {$order->order_number}: ".$e->getMessage());
-            }
+                // Actualizar el total de la orden
+                $order->update(['total' => $total]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Orden creada exitosamente',
-                'order' => [
-                    'id' => $order->id,
-                    'order_number' => $order->order_number,
-                    'total' => $order->total,
-                    'status' => $order->status,
-                    'created_at' => $order->created_at->format('d/m/Y H:i'),
-                ],
-                'items_count' => $order->items()->count(),
-                'print_results' => $printResults,
-            ], 201);
-        });
+                // Si viene de una mesa, ocuparla
+                if ($validated['table']) {
+                    $table = Table::where('numero', $validated['table'])->first();
+                    if ($table && $table->estado === Table::ESTADO_DISPONIBLE) {
+                        $table->ocupar($order);
+                    }
+                }
+
+                // Imprimir tickets a las estaciones correspondientes
+                $printResults = [];
+                try {
+                    $printerService = new PrinterService;
+                    $printResults = $printerService->printOrder($order);
+                } catch (\Exception $e) {
+                    Log::error("Error al imprimir orden {$order->order_number}: ".$e->getMessage());
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Orden creada exitosamente',
+                    'order' => [
+                        'id' => $order->id,
+                        'order_number' => $order->order_number,
+                        'total' => $order->total,
+                        'status' => $order->status,
+                        'created_at' => $order->created_at->format('d/m/Y H:i'),
+                    ],
+                    'items_count' => $order->items()->count(),
+                    'print_results' => $printResults,
+                ], 201);
+            });
+        } catch (UniqueConstraintViolationException $e) {
+            if ($attempts < 3) {
+                goto retry;
+            }
+            throw $e;
+        }
     }
 
     private function generateOrderNumber(): string
     {
         $date = date('Ymd');
-        $latest = Order::whereDate('created_at', today())->count();
+        $prefix = 'ORD-'.$date.'-';
 
-        return 'ORD-'.$date.'-'.str_pad($latest + 1, 4, '0', STR_PAD_LEFT);
+        $maxSeq = Order::where('order_number', 'like', $prefix.'%')
+            ->selectRaw("MAX(CAST(SUBSTRING(order_number FROM '.{4}$') AS INTEGER)) as max_seq")
+            ->value('max_seq') ?? 0;
+
+        return $prefix.str_pad($maxSeq + 1, 4, '0', STR_PAD_LEFT);
     }
 
     /**
