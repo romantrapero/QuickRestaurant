@@ -3,14 +3,95 @@
 namespace App\Services;
 
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Printer;
 use App\Models\RestaurantConfig;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Mike42\Escpos\Printer as EscposPrinter;
 
 class PrinterService
 {
-    public function printOrder(Order $order): array
+    public function printOrder(Order $order, bool $onlyDelta = true): array
+    {
+        if ($onlyDelta) {
+            return $this->printOrderDelta($order);
+        }
+
+        // Impresión completa (mantener para primera impresión)
+        return $this->printOrderComplete($order);
+    }
+
+    /**
+     * Imprime solo los cambios (delta) de la orden
+     */
+    public function printOrderDelta(Order $order): array
+    {
+        $results = [];
+
+        // 1. Obtener items que necesitan impresión
+        $newItems = $order->items()
+            ->whereNull('printed_at')
+            ->with('dish.category')
+            ->get();
+
+        $modifiedItems = $order->items()
+            ->whereNotNull('printed_at')
+            ->where('updated_at', '>', DB::raw('printed_at'))
+            ->where('status', '!=', OrderItem::STATUS_CANCELLED)
+            ->with('dish.category')
+            ->get();
+
+        $cancelledItems = $order->items()
+            ->where('status', OrderItem::STATUS_CANCELLED)
+            ->whereNotNull('printed_at')
+            ->where(function ($q) {
+                $q->where('updated_at', '>', DB::raw('printed_at'));
+            })
+            ->with('dish.category')
+            ->get();
+
+        // Si no hay cambios, no imprimir nada
+        if ($newItems->isEmpty() && $modifiedItems->isEmpty() && $cancelledItems->isEmpty()) {
+            return ['message' => 'No hay cambios para imprimir'];
+        }
+
+        // 2. Agrupar por estación de impresión
+        $itemsByStation = $this->groupItemsByStationDelta($newItems, $modifiedItems, $cancelledItems);
+
+        // 3. Imprimir a cada estación
+        foreach ($itemsByStation as $station => $stationItems) {
+            if ($station === 'none' || empty($stationItems)) {
+                continue;
+            }
+
+            try {
+                $result = $this->printDeltaToStation($order, $station, $stationItems);
+                $results[$station] = $result;
+            } catch (\Exception $e) {
+                Log::error("Error printing delta to {$station}: ".$e->getMessage());
+                $results[$station] = ['success' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        // 4. Marcar items como impresos
+        foreach ($newItems->merge($modifiedItems)->merge($cancelledItems) as $item) {
+            $item->markAsPrinted();
+        }
+
+        // 5. Imprimir recibo en caja solo si es orden nueva o hay cambios significativos
+        if ($newItems->isNotEmpty() || $cancelledItems->isNotEmpty()) {
+            $this->printReceipt($order);
+        }
+
+        return $results;
+    }
+
+    /**
+     * Imprime la orden completa (para primera impresión)
+     */
+    private function printOrderComplete(Order $order): array
     {
         $results = [];
         $order->load('items.dish.category');
@@ -31,11 +112,21 @@ class PrinterService
             }
         }
 
+        // Marcar todos los items como impresos
+        foreach ($order->items as $item) {
+            $item->markAsPrinted();
+        }
+
         return $results;
     }
 
     public function printToStation(Order $order, string $station, array $items = []): bool
     {
+        // MODO DESARROLLO: Simular impresión
+        if (config('printing.simulate', false)) {
+            return $this->simulatePrint($order, $station, $items, 'kitchen');
+        }
+
         $printer = Printer::findByStation($station);
 
         if (! $printer) {
@@ -63,6 +154,11 @@ class PrinterService
 
     public function printReceipt(Order $order): bool
     {
+        // MODO DESARROLLO: Simular impresión
+        if (config('printing.simulate', false)) {
+            return $this->simulatePrint($order, 'cashier', $order->items->all(), 'receipt');
+        }
+
         $printer = Printer::findByStation(Printer::STATION_CASHIER);
 
         if (! $printer) {
@@ -175,6 +271,167 @@ class PrinterService
 
             return false;
         }
+    }
+
+    /**
+     * Agrupa items por estación, marcando tipo de cambio
+     */
+    private function groupItemsByStationDelta($newItems, $modifiedItems, $cancelledItems): array
+    {
+        $grouped = [];
+
+        // Nuevos items
+        foreach ($newItems as $item) {
+            $station = $item->dish->category->print_station ?? 'hot_bar';
+            $grouped[$station]['new'][] = $item;
+        }
+
+        // Items modificados
+        foreach ($modifiedItems as $item) {
+            $station = $item->dish->category->print_station ?? 'hot_bar';
+            $grouped[$station]['modified'][] = $item;
+        }
+
+        // Items cancelados
+        foreach ($cancelledItems as $item) {
+            $station = $item->dish->category->print_station ?? 'hot_bar';
+            $grouped[$station]['cancelled'][] = $item;
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Imprime delta a una estación específica
+     */
+    private function printDeltaToStation(Order $order, string $station, array $items): array
+    {
+        // MODO DESARROLLO: Simular impresión
+        if (config('printing.simulate', false)) {
+            $this->simulatePrint($order, $station, $items, 'delta');
+
+            return [
+                'station' => $station,
+                'success' => true,
+                'simulated' => true,
+            ];
+        }
+
+        $printer = Printer::findByStation($station);
+
+        if (! $printer) {
+            return [
+                'station' => $station,
+                'success' => false,
+                'error' => 'No printer found for station',
+            ];
+        }
+
+        try {
+            $connector = $printer->getConnector();
+            $escpos = new EscposPrinter($connector);
+
+            $config = RestaurantConfig::config();
+            $nombreEmpresa = $config->nombre_comercial ?: 'QuickRestaurant';
+
+            // Header
+            $escpos->initialize();
+            $escpos->setJustification(EscposPrinter::JUSTIFY_CENTER);
+            $escpos->setEmphasis(true);
+            $escpos->setTextSize(2, 2);
+            $escpos->text("*** MODIFICACION ***\n");
+            $escpos->setTextSize(1, 1);
+            $escpos->setEmphasis(false);
+            $escpos->feed(1);
+
+            $escpos->setJustification(EscposPrinter::JUSTIFY_LEFT);
+            $escpos->text('Orden: '.$order->order_number."\n");
+            $escpos->text('Mesa: '.($order->table_number ?? 'N/A')."\n");
+            $escpos->text('Hora: '.now()->format('H:i:s')."\n");
+            $escpos->text(str_repeat('-', 32)."\n\n");
+
+            // Items nuevos
+            if (! empty($items['new'])) {
+                $escpos->setEmphasis(true);
+                $escpos->text(">>> AGREGAR <<<\n");
+                $escpos->setEmphasis(false);
+
+                foreach ($items['new'] as $item) {
+                    $this->printItem($escpos, $item);
+                }
+                $escpos->text("\n");
+            }
+
+            // Items modificados
+            if (! empty($items['modified'])) {
+                $escpos->setEmphasis(true);
+                $escpos->text(">>> MODIFICAR <<<\n");
+                $escpos->setEmphasis(false);
+
+                foreach ($items['modified'] as $item) {
+                    $this->printItem($escpos, $item, 'MODIFICADO');
+                }
+                $escpos->text("\n");
+            }
+
+            // Items cancelados
+            if (! empty($items['cancelled'])) {
+                $escpos->setEmphasis(true);
+                $escpos->text(">>> CANCELAR <<<\n");
+                $escpos->setEmphasis(false);
+
+                foreach ($items['cancelled'] as $item) {
+                    $this->printItem($escpos, $item, 'CANCELADO');
+                }
+                $escpos->text("\n");
+            }
+
+            $escpos->text(str_repeat('-', 32)."\n");
+            $escpos->feed(2);
+            $escpos->cut();
+            $escpos->close();
+
+            return [
+                'station' => $station,
+                'success' => true,
+            ];
+
+        } catch (\Exception $e) {
+            Log::error("Delta print error [{$station}]: ".$e->getMessage());
+
+            return [
+                'station' => $station,
+                'success' => false,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Método helper para imprimir un item individual
+     */
+    private function printItem(EscposPrinter $printer, OrderItem $item, ?string $badge = null): void
+    {
+        $line = sprintf(
+            '%dx %s',
+            $item->quantity,
+            $item->dish->name
+        );
+
+        if ($badge) {
+            $printer->setEmphasis(true);
+            $printer->text("[{$badge}] ");
+            $printer->setEmphasis(false);
+        }
+
+        $printer->text($line."\n");
+
+        // Notas especiales
+        if (! empty($item->special_instructions)) {
+            $printer->text('   >> '.$item->special_instructions."\n");
+        }
+
+        $printer->text("\n");
     }
 
     private function groupItemsByStation(Order $order): array
@@ -339,5 +596,104 @@ class PrinterService
         $printer->text("    Gracias por su visita!\n");
         $printer->text("================================\n");
         $printer->feed(3);
+    }
+
+    /**
+     * Simula la impresión en ambiente de desarrollo
+     */
+    private function simulatePrint(Order $order, string $station, $items, string $type = 'kitchen'): bool
+    {
+        $itemsCount = is_array($items) ? count($items) : (method_exists($items, 'count') ? $items->count() : 0);
+
+        Log::info("📄 [SIMULATED PRINT] {$type} ticket", [
+            'order' => $order->order_number,
+            'station' => $station,
+            'items_count' => $itemsCount,
+            'timestamp' => now()->format('Y-m-d H:i:s'),
+        ]);
+
+        // Guardar contenido simulado en storage para debugging
+        if (config('printing.save_simulated', false)) {
+            $content = $this->generateSimulatedTicketContent($order, $station, $items, $type);
+            $filename = "simulated-prints/{$order->order_number}-{$station}-".now()->format('YmdHis').'.txt';
+
+            Storage::disk('local')->put($filename, $content);
+            Log::info("📝 Ticket simulado guardado: storage/app/{$filename}");
+        }
+
+        return true;
+    }
+
+    /**
+     * Genera el contenido de un ticket simulado
+     */
+    private function generateSimulatedTicketContent($order, $station, $items, $type): string
+    {
+        $content = "=================================\n";
+        $content .= '  TICKET SIMULADO - '.strtoupper($station)."\n";
+        $content .= "  Tipo: {$type}\n";
+        $content .= "=================================\n";
+        $content .= "Orden: {$order->order_number}\n";
+        $content .= 'Mesa: '.($order->table_number ?? 'N/A')."\n";
+        $content .= 'Cliente: '.($order->customer_name ?? 'N/A')."\n";
+        $content .= 'Hora: '.now()->format('H:i:s')."\n";
+        $content .= "---------------------------------\n\n";
+
+        // Convertir items a array si es necesario
+        $itemsArray = is_array($items) ? $items : $items->all();
+
+        // Si es un array estructurado por tipo (delta)
+        if (isset($itemsArray['new']) || isset($itemsArray['modified']) || isset($itemsArray['cancelled'])) {
+            if (! empty($itemsArray['new'])) {
+                $content .= ">>> AGREGAR <<<\n";
+                foreach ($itemsArray['new'] as $item) {
+                    $content .= $this->formatSimulatedItem($item);
+                }
+                $content .= "\n";
+            }
+
+            if (! empty($itemsArray['modified'])) {
+                $content .= ">>> MODIFICAR <<<\n";
+                foreach ($itemsArray['modified'] as $item) {
+                    $content .= '[MODIFICADO] '.$this->formatSimulatedItem($item);
+                }
+                $content .= "\n";
+            }
+
+            if (! empty($itemsArray['cancelled'])) {
+                $content .= ">>> CANCELAR <<<\n";
+                foreach ($itemsArray['cancelled'] as $item) {
+                    $content .= '[CANCELADO] '.$this->formatSimulatedItem($item);
+                }
+                $content .= "\n";
+            }
+        } else {
+            // Items normales
+            foreach ($itemsArray as $item) {
+                $content .= $this->formatSimulatedItem($item);
+            }
+        }
+
+        $content .= "---------------------------------\n";
+        $content .= 'Total: $'.number_format($order->total, 2)."\n";
+        $content .= "=================================\n";
+
+        return $content;
+    }
+
+    /**
+     * Formatea un item para el ticket simulado
+     */
+    private function formatSimulatedItem($item): string
+    {
+        $line = "{$item->quantity}x {$item->dish->name}\n";
+
+        if (! empty($item->special_instructions)) {
+            $line .= "   >> {$item->special_instructions}\n";
+        }
+
+        $line .= "\n";
+
+        return $line;
     }
 }

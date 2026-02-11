@@ -98,7 +98,9 @@ class Order extends Model
 
     public function recalculateTotal(): void
     {
-        $this->total = $this->items()->sum(\Illuminate\Support\Facades\DB::raw('quantity * unit_price'));
+        $this->total = $this->items()
+            ->where('status', '!=', OrderItem::STATUS_CANCELLED)
+            ->sum(\Illuminate\Support\Facades\DB::raw('quantity * unit_price'));
         $this->save();
         $this->updatePaymentStatus();
     }

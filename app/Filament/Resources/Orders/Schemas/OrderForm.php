@@ -2,12 +2,9 @@
 
 namespace App\Filament\Resources\Orders\Schemas;
 
-use Filament\Forms\Components\DateTimePicker;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
-use Filament\Tables\Columns\BadgeColumn;
-use Filament\Support\Colors\Color;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Schema;
 
 class OrderForm

@@ -396,6 +396,23 @@
                 </button>
             </div>
         </div>
+
+        {{-- ===== MODAL NOTAS POR ITEM ===== --}}
+        <div id="item-notes-modal" style="display:none; position:fixed; inset:0; z-index:60; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:16px; padding:24px; max-width:400px; width:90%;">
+                <h3 style="font-size:18px; font-weight:700; margin:0 0 16px;">Notas para el item</h3>
+                <textarea id="item-notes-input" rows="3" placeholder="Ej: Sin cebolla, término medio..."
+                          style="width:100%; border:1px solid #d1d5db; border-radius:8px; padding:10px; font-size:14px; box-sizing:border-box;"></textarea>
+                <div style="display:flex; gap:12px; margin-top:16px;">
+                    <button onclick="closeItemNotesModal()" style="flex:1; background:#f3f4f6; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        Cancelar
+                    </button>
+                    <button onclick="saveItemNotes()" style="flex:1; background:#3b82f6; color:#fff; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:600;">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+        </div>
 </div>
 <script>
     // =============================================
@@ -458,7 +475,7 @@
                 existingNewItem.quantity += 1;
                 existingNewItem.total = existingNewItem.quantity * existingNewItem.price;
             } else {
-                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price), isOriginal: false });
+                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price), isOriginal: false, special_instructions: '' });
             }
         } else {
             const existingItemIndex = cart.findIndex(item => item.id === id);
@@ -466,7 +483,7 @@
                 cart[existingItemIndex].quantity += 1;
                 cart[existingItemIndex].total = cart[existingItemIndex].quantity * cart[existingItemIndex].price;
             } else {
-                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price) });
+                cart.push({ id, name, price: parseFloat(price), quantity: 1, total: parseFloat(price), special_instructions: '' });
             }
         }
         saveCart();
@@ -598,11 +615,16 @@
             const badge = item.isOriginal
                 ? '<span class="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded ml-2"><i class="fas fa-check text-[10px] mr-0.5"></i>Existente</span>'
                 : (editingOrderId ? '<span class="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded ml-2">Nuevo</span>' : '');
+            const notesIndicator = item.special_instructions
+                ? `<div class="text-xs text-gray-500 italic mt-1"><i class="fas fa-sticky-note text-blue-500 mr-1"></i>${item.special_instructions}</div>`
+                : '';
+
             cartHTML += `
                 <div class="cart-item flex justify-between items-center border-b pb-3 ${bgClass}">
                     <div class="flex-1">
                         <div class="font-semibold text-gray-800">${item.name}${badge}</div>
                         <div class="text-sm text-gray-600">$${item.price.toFixed(2)} c/u</div>
+                        ${notesIndicator}
                         <div class="flex items-center mt-2">
                             <button onclick="updateQuantity(${itemKey}, -1)"
                                     class="w-7 h-7 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition">
@@ -613,8 +635,13 @@
                                     class="w-7 h-7 bg-gray-200 rounded flex items-center justify-center hover:bg-gray-300 transition">
                                 <i class="fas fa-plus text-xs"></i>
                             </button>
+                            <button onclick="openItemNotesModal(${itemKey})"
+                                    class="ml-2 text-blue-500 hover:text-blue-700 transition"
+                                    title="Agregar notas">
+                                <i class="fas fa-sticky-note"></i>
+                            </button>
                             <button onclick="removeFromCart(${itemKey})"
-                                    class="ml-4 text-red-500 hover:text-red-700 transition">
+                                    class="ml-2 text-red-500 hover:text-red-700 transition">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </div>
@@ -696,7 +723,8 @@
             items: cart.map(item => ({
                 id: item.id,
                 price: item.price,
-                quantity: item.quantity
+                quantity: item.quantity,
+                special_instructions: item.special_instructions || null
             }))
         };
         
@@ -885,6 +913,50 @@
     }
 
     // =============================================
+    // GESTIÓN DE NOTAS POR ITEM
+    // =============================================
+    let editingItemKey = null;
+
+    function openItemNotesModal(itemKey) {
+        editingItemKey = itemKey;
+        const item = cart.find(i => {
+            if (typeof itemKey === 'string' && itemKey.startsWith('orig-')) {
+                const oId = parseInt(itemKey.replace(/'/g, '').replace('orig-', ''));
+                return i.isOriginal && i.orderItemId === oId;
+            }
+            return i.id === itemKey;
+        });
+
+        document.getElementById('item-notes-input').value = item?.special_instructions || '';
+        document.getElementById('item-notes-modal').style.display = 'flex';
+    }
+
+    function closeItemNotesModal() {
+        document.getElementById('item-notes-modal').style.display = 'none';
+        editingItemKey = null;
+    }
+
+    function saveItemNotes() {
+        const notes = document.getElementById('item-notes-input').value;
+        const itemIndex = cart.findIndex(i => {
+            if (typeof editingItemKey === 'string' && editingItemKey.startsWith('orig-')) {
+                const oId = parseInt(editingItemKey.replace(/'/g, '').replace('orig-', ''));
+                return i.isOriginal && i.orderItemId === oId;
+            }
+            return i.id === editingItemKey;
+        });
+
+        if (itemIndex !== -1) {
+            cart[itemIndex].special_instructions = notes;
+            saveCart();
+            updateCartDisplay();
+        }
+
+        closeItemNotesModal();
+        showNotification('Notas guardadas', 'success');
+    }
+
+    // =============================================
     // EXPORTAR FUNCIONES GLOBALES
     // =============================================
     window.addToCart = addToCart;
@@ -892,6 +964,9 @@
     window.removeFromCart = removeFromCart;
     window.clearCart = clearCart;
     window.handleConfirmOrder = handleConfirmOrder;
+    window.openItemNotesModal = openItemNotesModal;
+    window.closeItemNotesModal = closeItemNotesModal;
+    window.saveItemNotes = saveItemNotes;
 
     // =============================================
     // SISTEMA DE ÓRDENES ACTIVAS Y COBRO
@@ -1248,6 +1323,7 @@
             price: parseFloat(item.unit_price),
             quantity: item.quantity,
             total: parseFloat(item.total_price),
+            special_instructions: item.special_instructions || '',
             isOriginal: true
         }));
 

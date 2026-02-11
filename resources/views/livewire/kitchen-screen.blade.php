@@ -125,12 +125,14 @@
                                         {{ $item['quantity'] }}
                                     </span>
                                     <span class="font-medium">{{ $item['dish']['name'] }}</span>
-                                    @if($item['special_instructions'])
-                                        <span class="ml-2 text-yellow-400 text-xs" 
-                                                title="{{ $item['special_instructions'] }}">
-                                            <i class="fas fa-sticky-note"></i>
-                                        </span>
-                                    @endif
+                                </div>
+                                @if($item['special_instructions'])
+                                    <div class="mt-1 text-yellow-400 text-xs italic bg-yellow-900/20 px-2 py-1 rounded border-l-2 border-yellow-400">
+                                        <i class="fas fa-sticky-note mr-1"></i>
+                                        {{ $item['special_instructions'] }}
+                                    </div>
+                                @endif
+                                <div class="flex items-center">
                                 </div>
                                 <div class="text-sm text-gray-400">
                                     {{ $item['dish']['preparation_time'] ?? 15 }} min

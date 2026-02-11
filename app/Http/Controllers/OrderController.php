@@ -38,7 +38,9 @@ class OrderController extends Controller
      */
     public function active()
     {
-        $orders = Order::with(['items.dish', 'payments'])
+        $orders = Order::with(['items' => function ($query) {
+            $query->where('status', '!=', OrderItem::STATUS_CANCELLED);
+        }, 'items.dish', 'payments'])
             ->whereIn('status', ['pending', 'preparing', 'ready'])
             ->where('payment_status', '!=', 'paid')
             ->orderBy('created_at', 'desc')
@@ -88,6 +90,7 @@ class OrderController extends Controller
             'items.*.id' => 'required|exists:dishes,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
+            'items.*.special_instructions' => 'nullable|string|max:500',
         ]);
 
         // Usar transacción para asegurar integridad, con retry por si hay race condition
@@ -119,6 +122,7 @@ class OrderController extends Controller
                         'quantity' => $itemData['quantity'],
                         'unit_price' => $itemData['price'],
                         'total_price' => $itemData['price'] * $itemData['quantity'],
+                        'special_instructions' => $itemData['special_instructions'] ?? null,
                     ]);
 
                     $total += $orderItem->total_price;
@@ -183,7 +187,10 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
-        $order->load('items.dish');
+        // Cargar items excluyendo cancelados
+        $order->load(['items' => function ($query) {
+            $query->where('status', '!=', OrderItem::STATUS_CANCELLED);
+        }, 'items.dish']);
 
         // An order is "closed" when it's delivered AND fully paid
         $isClosed = $order->status === 'delivered' && $order->payment_status === 'paid';
@@ -239,6 +246,15 @@ class OrderController extends Controller
                 'modified_by' => 'POS',
             ]);
 
+            // Imprimir ticket de modificación
+            $printResults = [];
+            try {
+                $printerService = new PrinterService;
+                $printResults = $printerService->printOrder($order);
+            } catch (\Exception $e) {
+                Log::error("Error al imprimir modificación de item {$order->order_number}: ".$e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Cantidad actualizada',
@@ -247,6 +263,7 @@ class OrderController extends Controller
                     'order_number' => $order->order_number,
                     'total' => $order->total,
                 ],
+                'print_results' => $printResults,
             ]);
         });
     }
@@ -271,6 +288,11 @@ class OrderController extends Controller
             $totalBefore = (float) $order->total;
             $dish = $orderItem->dish;
 
+            // Marcar como cancelado en lugar de borrar
+            $orderItem->update([
+                'status' => OrderItem::STATUS_CANCELLED,
+            ]);
+
             OrderModification::create([
                 'order_id' => $order->id,
                 'order_item_id' => $orderItem->id,
@@ -284,8 +306,16 @@ class OrderController extends Controller
                 'reason' => $request->input('reason'),
             ]);
 
-            $orderItem->delete();
             $order->recalculateTotal();
+
+            // Imprimir ticket de cancelación
+            $printResults = [];
+            try {
+                $printerService = new PrinterService;
+                $printResults = $printerService->printOrder($order);
+            } catch (\Exception $e) {
+                Log::error("Error al imprimir cancelación de item {$order->order_number}: ".$e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -295,6 +325,7 @@ class OrderController extends Controller
                     'order_number' => $order->order_number,
                     'total' => $order->total,
                 ],
+                'print_results' => $printResults,
             ]);
         });
     }
@@ -306,6 +337,7 @@ class OrderController extends Controller
             'items.*.id' => 'required|exists:dishes,id',
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.price' => 'required|numeric|min:0',
+            'items.*.special_instructions' => 'nullable|string|max:500',
         ]);
 
         if (in_array($order->status, ['delivered', 'cancelled'])) {
@@ -327,6 +359,7 @@ class OrderController extends Controller
                     'quantity' => $itemData['quantity'],
                     'unit_price' => $itemData['price'],
                     'total_price' => $itemData['price'] * $itemData['quantity'],
+                    'special_instructions' => $itemData['special_instructions'] ?? null,
                 ]);
 
                 $order->recalculateTotal();

@@ -2,13 +2,13 @@
 
 namespace App\Filament\Resources\Dishes\Schemas;
 
+use App\Models\Category;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Schema;
-use App\Models\Category;
 
 class DishForm
 {
@@ -42,7 +42,7 @@ class DishForm
                     ->required()
                     ->default(true),
                 FileUpload::make('image_url')
-                    //->disk('public')
+                    // ->disk('public')
                     ->image()
                     ->label('Imagen'),
                 TextInput::make('preparation_time')

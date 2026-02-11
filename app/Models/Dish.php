@@ -10,14 +10,14 @@ class Dish extends Model
     use HasFactory;
 
     protected $fillable = [
-        'category_id', 
-        'name', 
-        'description', 
-        'cost_price', 
-        'sale_price', 
-        'is_available', 
-        'image_url', 
-        'preparation_time'
+        'category_id',
+        'name',
+        'description',
+        'cost_price',
+        'sale_price',
+        'is_available',
+        'image_url',
+        'preparation_time',
     ];
 
     public function category()
