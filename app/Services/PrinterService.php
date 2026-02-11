@@ -80,11 +80,6 @@ class PrinterService
             $item->markAsPrinted();
         }
 
-        // 5. Imprimir recibo en caja solo si es orden nueva o hay cambios significativos
-        if ($newItems->isNotEmpty() || $cancelledItems->isNotEmpty()) {
-            $this->printReceipt($order);
-        }
-
         return $results;
     }
 
