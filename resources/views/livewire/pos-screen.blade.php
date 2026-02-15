@@ -250,9 +250,15 @@
                     <h2 id="detail-order-number" style="font-size:18px; font-weight:700; color:#1f2937; margin:0;"></h2>
                     <p id="detail-table-info" style="font-size:14px; color:#6b7280; margin:4px 0 0;"></p>
                 </div>
-                <button onclick="closeOrderDetail()" style="background:#f3f4f6; border:none; border-radius:50%; width:36px; height:36px; cursor:pointer; display:flex; align-items:center; justify-content:center;">
-                    <i class="fas fa-times text-gray-600"></i>
-                </button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button onclick="printSaleTicket()" class="inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold transition text-sm">
+                        <i class="fas fa-print"></i>
+                        Imprimir Ticket
+                    </button>
+                    <button onclick="closeOrderDetail()" style="background:#f3f4f6; border:none; border-radius:50%; width:36px; height:36px; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+                        <i class="fas fa-times text-gray-600"></i>
+                    </button>
+                </div>
             </div>
 
             {{-- Contenido scrollable --}}
@@ -1489,6 +1495,34 @@
         }
     }
 
+    async function printSaleTicket() {
+        if (!selectedOrder) {
+            showNotification('No hay orden seleccionada', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/orders/${selectedOrder.id}/print-ticket`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('✅ Ticket impreso correctamente', 'success');
+            } else {
+                showNotification('❌ ' + (data.message || 'Error al imprimir'), 'error');
+            }
+        } catch (error) {
+            console.error('Error printing ticket:', error);
+            showNotification('❌ Error de conexión al imprimir', 'error');
+        }
+    }
+
     // =============================================
     // EXPORTAR FUNCIONES DE ÓRDENES
     // =============================================
@@ -1499,6 +1533,7 @@
     window.processPayment = processPayment;
     window.editOrder = editOrder;
     window.cancelEditMode = cancelEditMode;
+    window.printSaleTicket = printSaleTicket;
 
     // =============================================
     // SISTEMA DE TURNOS (CORTE DE CAJA)

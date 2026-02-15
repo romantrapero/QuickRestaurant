@@ -13,6 +13,37 @@ use Mike42\Escpos\Printer as EscposPrinter;
 
 class PrinterService
 {
+    /**
+     * Determina si una orden es para llevar (no es mesa)
+     */
+    private function isToGoOrder(Order $order): bool
+    {
+        $table = $order->table_number ?? '';
+
+        return $table !== '' && ! str_starts_with($table, 'Mesa');
+    }
+
+    /**
+     * Imprime banner "PARA LLEVAR" destacado si la orden es To Go
+     */
+    private function printToGoBanner(EscposPrinter $printer, Order $order): void
+    {
+        if (! $this->isToGoOrder($order)) {
+            return;
+        }
+
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+        $printer->feed(1);
+        $printer->setEmphasis(true);
+        $printer->setTextSize(2, 2);
+        $printer->setReverseColors(true);
+        $printer->text(' '.mb_strtoupper($order->table_number)." \n");
+        $printer->setReverseColors(false);
+        $printer->setTextSize(1, 1);
+        $printer->setEmphasis(false);
+        $printer->feed(1);
+    }
+
     public function printOrder(Order $order, bool $onlyDelta = true): array
     {
         if ($onlyDelta) {
@@ -107,8 +138,8 @@ class PrinterService
             }
         }
 
-        // Marcar todos los items como impresos
-        foreach ($order->items as $item) {
+        // Marcar todos los items como impresos (excepto cancelados)
+        foreach ($order->items->where('status', '!=', OrderItem::STATUS_CANCELLED) as $item) {
             $item->markAsPrinted();
         }
 
@@ -151,7 +182,9 @@ class PrinterService
     {
         // MODO DESARROLLO: Simular impresión
         if (config('printing.simulate', false)) {
-            return $this->simulatePrint($order, 'cashier', $order->items->all(), 'receipt');
+            $activeItems = $order->items->where('status', '!=', OrderItem::STATUS_CANCELLED);
+
+            return $this->simulatePrint($order, 'cashier', $activeItems->all(), 'receipt');
         }
 
         $printer = Printer::findByStation(Printer::STATION_CASHIER);
@@ -209,9 +242,11 @@ class PrinterService
                     default => $ticketType,
                 };
 
-                $items = $order->items->filter(function ($item) use ($ticketType) {
-                    return ($item->dish->category->print_station ?? 'none') === $ticketType;
-                })->values()->all();
+                $items = $order->items
+                    ->where('status', '!=', OrderItem::STATUS_CANCELLED)
+                    ->filter(function ($item) use ($ticketType) {
+                        return ($item->dish->category->print_station ?? 'none') === $ticketType;
+                    })->values()->all();
 
                 if (empty($items)) {
                     $escpos->close();
@@ -231,6 +266,121 @@ class PrinterService
 
             return false;
         }
+    }
+
+    /**
+     * Imprime ticket de venta para el cliente (sin información de pago)
+     */
+    public function printSaleTicket(Order $order): bool
+    {
+        // MODO DESARROLLO: Simular impresión
+        if (config('printing.simulate', false)) {
+            $activeItems = $order->items->where('status', '!=', OrderItem::STATUS_CANCELLED);
+
+            return $this->simulatePrint($order, 'cashier', $activeItems->all(), 'sale_ticket');
+        }
+
+        $printer = Printer::findByStation(Printer::STATION_CASHIER);
+
+        if (! $printer) {
+            Log::warning('No active cashier printer found');
+
+            return false;
+        }
+
+        try {
+            $connector = $printer->getConnector();
+            $escpos = new EscposPrinter($connector);
+
+            $this->printSaleTicketContent($escpos, $order);
+
+            $escpos->cut();
+            $escpos->close();
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Sale ticket printer error: '.$e->getMessage());
+
+            return false;
+        }
+    }
+
+    /**
+     * Genera contenido del ticket de venta (sin pagos)
+     */
+    private function printSaleTicketContent(EscposPrinter $printer, Order $order): void
+    {
+        $order->load('items.dish');
+
+        $config = RestaurantConfig::config();
+        $nombreEmpresa = $config->nombre_comercial ?: 'QuickRestaurant';
+        $ivaPorcentaje = $config->iva_porcentaje ?: 16;
+
+        $printer->initialize();
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+
+        $printer->setEmphasis(true);
+        $printer->text("================================\n");
+        $printer->text("     {$nombreEmpresa}\n");
+        $printer->text("================================\n");
+        $printer->setEmphasis(false);
+
+        if ($config->direccion) {
+            $printer->text($config->direccion."\n");
+        }
+        if ($config->telefono) {
+            $printer->text("Tel: {$config->telefono}\n");
+        }
+
+        // Número de orden grande y en negritas
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+        $printer->setEmphasis(true);
+        $printer->setTextSize(2, 2);
+        $printer->text($order->order_number."\n");
+        $printer->setTextSize(1, 1);
+        $printer->setEmphasis(false);
+
+        // Banner To Go destacado
+        $this->printToGoBanner($printer, $order);
+
+        $printer->setJustification(EscposPrinter::JUSTIFY_LEFT);
+
+        $printer->text('Mesa: '.($order->table_number ?: 'N/A')."\n");
+        $printer->text('Cliente: '.($order->customer_name ?: 'N/A')."\n");
+        $printer->text('Fecha: '.$order->created_at->format('d/m/Y H:i')."\n");
+
+        $printer->text("--------------------------------\n");
+
+        // Filtrar items cancelados
+        $activeItems = $order->items->where('status', '!=', OrderItem::STATUS_CANCELLED);
+
+        foreach ($activeItems as $item) {
+            $qty = $item->quantity;
+            $name = mb_substr($item->dish->name ?? 'Item', 0, 20);
+            $total = number_format($item->total_price, 2);
+
+            $line = sprintf("%-3s %-20s %8s\n", $qty.'x', $name, '$'.$total);
+            $printer->text($line);
+        }
+
+        $printer->text("--------------------------------\n");
+
+        $subtotal = $order->total / (1 + ($ivaPorcentaje / 100));
+        $iva = $order->total - $subtotal;
+
+        $printer->text(sprintf("%-24s %8s\n", 'Subtotal:', '$'.number_format($subtotal, 2)));
+        $printer->text(sprintf("%-24s %8s\n", "IVA ({$ivaPorcentaje}%):", '$'.number_format($iva, 2)));
+
+        $printer->setEmphasis(true);
+        $printer->text(sprintf("%-24s %8s\n", 'TOTAL:', '$'.number_format($order->total, 2)));
+        $printer->setEmphasis(false);
+
+        $printer->feed(1);
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+        $printer->text("================================\n");
+        $printer->text("    Gracias por su visita!\n");
+        $printer->text("================================\n");
+        $printer->feed(3);
     }
 
     public function testPrinter(Printer $printer): bool
@@ -337,11 +487,20 @@ class PrinterService
             $escpos->text("*** MODIFICACION ***\n");
             $escpos->setTextSize(1, 1);
             $escpos->setEmphasis(false);
-            $escpos->feed(1);
+
+            // Número de orden grande y en negritas
+            $escpos->setEmphasis(true);
+            $escpos->setTextSize(2, 2);
+            $escpos->text($order->order_number."\n");
+            $escpos->setTextSize(1, 1);
+            $escpos->setEmphasis(false);
+
+            // Banner To Go destacado
+            $this->printToGoBanner($escpos, $order);
 
             $escpos->setJustification(EscposPrinter::JUSTIFY_LEFT);
-            $escpos->text('Orden: '.$order->order_number."\n");
             $escpos->text('Mesa: '.($order->table_number ?? 'N/A')."\n");
+            $escpos->text('Cliente: '.($order->customer_name ?: 'N/A')."\n");
             $escpos->text('Hora: '.now()->format('H:i:s')."\n");
             $escpos->text(str_repeat('-', 32)."\n\n");
 
@@ -433,7 +592,7 @@ class PrinterService
     {
         $grouped = [];
 
-        foreach ($order->items as $item) {
+        foreach ($order->items->where('status', '!=', OrderItem::STATUS_CANCELLED) as $item) {
             $station = $item->dish->category->print_station ?? 'none';
 
             if (! isset($grouped[$station])) {
@@ -460,10 +619,19 @@ class PrinterService
         $printer->text("================================\n");
         $printer->setEmphasis(false);
 
-        $printer->setJustification(EscposPrinter::JUSTIFY_LEFT);
-        $printer->feed(1);
+        // Número de orden grande y en negritas
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+        $printer->setEmphasis(true);
+        $printer->setTextSize(2, 2);
+        $printer->text($order->order_number."\n");
+        $printer->setTextSize(1, 1);
+        $printer->setEmphasis(false);
 
-        $printer->text('Orden: '.$order->order_number."\n");
+        // Banner To Go destacado
+        $this->printToGoBanner($printer, $order);
+
+        $printer->setJustification(EscposPrinter::JUSTIFY_LEFT);
+
         $printer->text('Mesa: '.($order->table_number ?: 'N/A')."\n");
         $printer->text('Cliente: '.($order->customer_name ?: 'N/A')."\n");
         $printer->text('Hora: '.$order->created_at->format('H:i')."\n");
@@ -525,17 +693,26 @@ class PrinterService
             $printer->text("Tel: {$config->telefono}\n");
         }
 
-        $printer->setJustification(EscposPrinter::JUSTIFY_LEFT);
-        $printer->feed(1);
+        // Número de orden grande y en negritas
+        $printer->setJustification(EscposPrinter::JUSTIFY_CENTER);
+        $printer->setEmphasis(true);
+        $printer->setTextSize(2, 2);
+        $printer->text($order->order_number."\n");
+        $printer->setTextSize(1, 1);
+        $printer->setEmphasis(false);
 
-        $printer->text('Orden: '.$order->order_number."\n");
+        // Banner To Go destacado
+        $this->printToGoBanner($printer, $order);
+
+        $printer->setJustification(EscposPrinter::JUSTIFY_LEFT);
+
         $printer->text('Mesa: '.($order->table_number ?: 'N/A')."\n");
         $printer->text('Cliente: '.($order->customer_name ?: 'N/A')."\n");
         $printer->text('Fecha: '.$order->created_at->format('d/m/Y H:i')."\n");
 
         $printer->text("--------------------------------\n");
 
-        foreach ($order->items as $item) {
+        foreach ($order->items->where('status', '!=', OrderItem::STATUS_CANCELLED) as $item) {
             $qty = $item->quantity;
             $name = mb_substr($item->dish->name ?? 'Item', 0, 20);
             $total = number_format($item->total_price, 2);
@@ -628,7 +805,12 @@ class PrinterService
         $content .= '  TICKET SIMULADO - '.strtoupper($station)."\n";
         $content .= "  Tipo: {$type}\n";
         $content .= "=================================\n";
-        $content .= "Orden: {$order->order_number}\n";
+        $content .= "\n  ** {$order->order_number} **\n\n";
+
+        if ($this->isToGoOrder($order)) {
+            $content .= '  >>> '.mb_strtoupper($order->table_number)." <<<\n\n";
+        }
+
         $content .= 'Mesa: '.($order->table_number ?? 'N/A')."\n";
         $content .= 'Cliente: '.($order->customer_name ?? 'N/A')."\n";
         $content .= 'Hora: '.now()->format('H:i:s')."\n";

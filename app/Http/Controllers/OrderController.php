@@ -403,4 +403,27 @@ class OrderController extends Controller
             ]);
         });
     }
+
+    /**
+     * Imprime ticket de venta desde el POS (sin información de pago)
+     */
+    public function printTicket(Order $order)
+    {
+        try {
+            $printerService = new PrinterService;
+            $result = $printerService->printSaleTicket($order);
+
+            return response()->json([
+                'success' => $result,
+                'message' => $result ? 'Ticket impreso correctamente' : 'Error al imprimir ticket',
+            ]);
+        } catch (\Exception $e) {
+            Log::error("Error printing sale ticket: {$order->order_number} - ".$e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al imprimir: '.$e->getMessage(),
+            ], 500);
+        }
+    }
 }

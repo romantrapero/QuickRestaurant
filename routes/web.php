@@ -25,6 +25,7 @@ Route::prefix('api')->group(function () {
     Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'addItems']);
     Route::put('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'updateItem']);
     Route::delete('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'removeItem']);
+    Route::post('/orders/{order}/print-ticket', [\App\Http\Controllers\OrderController::class, 'printTicket']);
     Route::post('/orders/{order}/payments', [\App\Http\Controllers\PaymentController::class, 'store']);
 
     // Cash Shift (Corte de Caja)
